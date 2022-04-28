@@ -32,6 +32,9 @@ DB_PASSWORD = os.environ.get('DB_PASSWORD')
 DB_DATABASE = os.environ.get('DB_DATABASE')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 
+DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
+                               cursorclass=pymysql.cursors.DictCursor)
+
 
 def configure_telegram():
     """
@@ -47,9 +50,7 @@ def configure_telegram():
 
 def get_chat_state(chat_id):
     state = -1
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM chats where id={chat_id}')
         if cur.rowcount != 0:
             result = cur.fetchone()
@@ -62,61 +63,46 @@ def get_chat_state(chat_id):
             else:
                 state = result["state"]
     if state == -1:
-        with con.cursor() as cur:
+        with DATABASE.cursor() as cur:
             cur.execute(f'INSERT INTO chats VALUES({chat_id}, 0, now(), "", NULL)')
-            con.commit()
+            DATABASE.commit()
             state = 0
-    con.close()
     return state
 
 
 def set_chat_state(chat_id, new_state):
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
     logger.info(f'Setting state in DB to {new_state}')
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE chats SET state={new_state}, lastUpdate=now() WHERE id={chat_id}')
-        con.commit()
-    con.close()
+        DATABASE.commit()
 
 
 def set_chat_user(chat_id, user_id):
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
     logger.info(f'Setting user in DB to {user_id}')
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE chats SET affiliatedUser={user_id}, lastUpdate=now() WHERE id={chat_id}')
-        con.commit()
-    con.close()
+        DATABASE.commit()
 
 
 def set_chat_context(chat_id, new_context):
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
     encoded_context = new_context.replace("\'", "\\\'")
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE chats SET context=\'{encoded_context}\', lastUpdate=now() WHERE id={chat_id}')
-        con.commit()
-    con.close()
+        DATABASE.commit()
 
 
 def get_chat_context(chat_id):
     context = {}
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM chats where id={chat_id}')
         if cur.rowcount != 0:
             result = cur.fetchone()
             context = json.loads(result['context'])
-    con.close()
     return context
 
 
 def increment_child_count(user_id):
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users where id={user_id}')
         if cur.rowcount == 1:
             user = cur.fetchone()
@@ -125,11 +111,41 @@ def increment_child_count(user_id):
                 kid_count = 0
             kid_count = kid_count + 1
             cur.execute(f'UPDATE users SET kidCount={kid_count} WHERE id={user_id}')
-            con.commit()
+            DATABASE.commit()
             parent = user['parentUserId']
             if isinstance(parent, numbers.Number):
                 increment_child_count(parent)
-    con.close()
+
+
+def update_password(chat_id, new_password):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE users SET password="{new_password}" WHERE '
+                    f'id = (SELECT affiliatedUser FROM chats WHERE id={chat_id});')
+    DATABASE.commit()
+
+
+def get_current_user(chat_id):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT users.* FROM users INNER JOIN chats ON users.id = chats.affiliatedUser'
+                    f' WHERE chats.id={chat_id};')
+        user = cur.fetchone()
+    return user
+
+
+def get_town_name(town_key):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT t2.town from towns t1 inner join towns t2 on t1.key_idx = t2.id WHERE t1.id = {town_key};')
+        town = cur.fetchone()
+    return town['town']
+
+
+def try_to_delete_message(bot, chat_id, update):
+    try:
+        bot.delete_message(chat_id, update.message.message_id)
+    except:
+        logger.info("Could not delete the message")
+    finally:
+        logger.info("Tried to delete the message")
 
 
 def chat_reaction0(bot, update):
@@ -147,23 +163,15 @@ def chat_reaction0(bot, update):
 def chat_reaction1(bot, update):
     username = update.message.text.strip().replace('\"', '\\\"').replace('\'', '\\\'')
     chat_id = update.message.chat.id
-    try:
-        bot.delete_message(chat_id, update.message.message_id)
-    except:
-        logger.info("Could not delete the message")
-    finally:
-        logger.info("Tried to delete the message")
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    try_to_delete_message(bot, chat_id, update)
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users where login="{username}"')
         if cur.rowcount == 0:
-            con.close()
             return 13
         user = cur.fetchone()
         chat_id = update.message.chat.id
 
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM chats WHERE id={chat_id}')
         chat = cur.fetchone()
         if chat['affiliatedUser'] == user['id']:
@@ -171,33 +179,26 @@ def chat_reaction1(bot, update):
                     'Важно - если вы волнуетесь о безопасности - я вас помним по техническому номеру чата. Я не знаю' \
                     ' и не сохраняю никаких личных данных по которым вас можно было бы идентифицировать.'
             bot.sendMessage(chat_id=chat_id, text=reply)
-            con.close()
             return 11
     context = {'user': user['id'], 'hash': user['password']}
     set_chat_context(chat_id, json.dumps(context))
-    con.close()
     return 14
 
 
 def chat_reaction2(bot, update):
     invitation_key = update.message.text.lower().strip()
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM invites where invite="{invitation_key}"')
         if cur.rowcount > 0:
             result = cur.fetchone()
             used_by = result['usedBy']
             if isinstance(used_by, numbers.Number):
-                con.close()
                 return 6
             context = {'invite': result['id']}
             chat_id = update.message.chat.id
             set_chat_context(chat_id, json.dumps(context))
-            con.close()
             return 7
         else:
-            con.close()
             return 5
 
 
@@ -211,18 +212,14 @@ def chat_reaction4(bot, update):
 
 def chat_reaction7(bot, update):
     username = update.message.text.strip().replace('\"', '\\\"').replace('\'', '\\\'')
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users where login="{username}"')
         if cur.rowcount > 0:
-            con.close()
             return 9
         chat_id = update.message.chat.id
         context = get_chat_context(chat_id)
         context['login'] = username
         set_chat_context(chat_id, json.dumps(context))
-        con.close()
         return 8
 
 
@@ -230,7 +227,7 @@ def chat_reaction8(bot, update):
     password = update.message.text.strip()
     password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
     chat_id = update.message.chat.id
-    bot.delete_message(chat_id, update.message.message_id)
+    try_to_delete_message(bot, chat_id, update)
     context = get_chat_context(chat_id)
     context['passhash'] = password_hash
     set_chat_context(chat_id, json.dumps(context))
@@ -241,36 +238,33 @@ def chat_reaction10(bot, update):
     password = update.message.text.strip()
     password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
     chat_id = update.message.chat.id
-    bot.delete_message(chat_id, update.message.message_id)
+    try_to_delete_message(bot, chat_id, update)
     context = get_chat_context(chat_id)
     prevhash = context['passhash']
     if password_hash != prevhash:
         return 12
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         invite = context['invite']
         cur.execute(f'SELECT * FROM invites WHERE id={invite}')
         invite_object = cur.fetchone()
     inviting_user_id = invite_object['createdBy']
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         login = context['login']
         parent = "NULL"
         if isinstance(inviting_user_id, numbers.Number):
             parent = inviting_user_id
         cur.execute(f'INSERT INTO users (login, password, last_login, parentUserId, kidCount) VALUES("{login}", "{password_hash}", now(), {parent}, 0)')
-        con.commit()
+        DATABASE.commit()
         new_user_id = cur.lastrowid
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE invites SET usedBy={new_user_id}, usedOn=now() WHERE id={invite}')
-        con.commit()
+        DATABASE.commit()
     increment_child_count(parent)
     for x in range(2):
-        with con.cursor() as cur:
+        with DATABASE.cursor() as cur:
             invite_code = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(10))
             cur.execute(f'INSERT INTO invites (invite, createdBy, usedBy, createdOn, usedOn) VALUES ("{invite_code}", {new_user_id}, NULL, now(), NULL)')
-            con.commit()
-    con.close()
+            DATABASE.commit()
     set_chat_context(chat_id, "")
     set_chat_user(chat_id, new_user_id)
     return 11
@@ -295,13 +289,75 @@ def chat_reaction11(bot, update):
 def chat_reaction14(bot, update):
     password = update.message.text.strip()
     chat_id = update.message.chat.id
-    bot.delete_message(chat_id, update.message.message_id)
+    try_to_delete_message(bot, chat_id, update)
     password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
     context = get_chat_context(chat_id)
     if context['hash'] == password_hash:
         set_chat_user(chat_id, context['user'])
         return 11
     return 15
+
+
+def chat_reaction18(bot, update):
+    text = update.message.text
+    if text == "Сменить":
+        return 23
+    return 11
+
+
+def chat_reaction19(bot, update):
+    text = update.message.text
+    if text == "Да":
+        return 20
+    return 11
+
+
+def chat_reaction20(bot, update):
+    password = update.message.text.strip()
+    password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
+    chat_id = update.message.chat.id
+    try_to_delete_message(bot, chat_id, update)
+    context = {'passhash': password_hash}
+    set_chat_context(chat_id, json.dumps(context))
+    return 21
+
+
+def chat_reaction21(bot, update):
+    password = update.message.text.strip()
+    password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
+    chat_id = update.message.chat.id
+    try_to_delete_message(bot, chat_id, update)
+    context = get_chat_context(chat_id)
+    if context['passhash'] == password_hash:
+        set_chat_context(chat_id, "")
+        update_password(chat_id, password_hash)
+        return 25
+    else:
+        return 22
+
+
+def chat_reaction23(bot, update):
+    town_name = update.message.text.strip().capitalize()
+    town_id = None
+    user = get_current_user(update.message.chat.id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT * FROM towns WHERE town="{town_name}"')
+        if cur.rowcount > 0:
+            town = cur.fetchone()
+            town_id = town['id']
+    if town_id is None:
+        with DATABASE.cursor() as cur:
+            cur.execute(f'INSERT INTO towns (town, key_idx) VALUES ("{town_name}", 1)')
+            DATABASE.commit()
+            town_id = cur.lastrowid
+        with DATABASE.cursor() as cur:
+            cur.execute(f'UPDATE towns SET key_idx={town_id} WHERE id={town_id}')
+            DATABASE.commit()
+
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE users SET town={town_id} WHERE id={user["id"]}')
+        DATABASE.commit()
+    return 24
 
 
 def chat_output0(bot, chat_id, update):
@@ -409,9 +465,7 @@ def chat_output15(bot, chat_id, update):
 
 def chat_output16(bot, chat_id, update):
     reply = 'Данные о моих приглашениях:'
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount from '
                     f'invites inner join chats on invites.createdBy  = chats.affiliatedUser left join users on '
                     f'invites.usedBy = users.id where chats.id={chat_id}')
@@ -447,19 +501,14 @@ def chat_output16(bot, chat_id, update):
 
 
 def chat_output17(bot, chat_id, update):
-    con = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                          cursorclass=pymysql.cursors.DictCursor)
-    with con.cursor() as cur:
+    with DATABASE.cursor() as cur:
         cur.execute("SELECT count(*) AS numUsers FROM users")
         count = cur.fetchone()
     total = count['numUsers']
-    with con.cursor() as cur:
-        cur.execute(f'SELECT users.* FROM users INNER JOIN chats ON users.id = chats.affiliatedUser'
-                    f' WHERE chats.id={chat_id};')
-        user = cur.fetchone()
+    user = get_current_user(chat_id)
     in_town = None
     if user['town'] is not None:
-        with con.cursor() as cur:
+        with DATABASE.cursor() as cur:
             town = user['town']
             cur.execute(f'SELECT count(*) as inTown from users where town = {town};')
             in_town = cur.fetchone()['inTown']
@@ -481,6 +530,60 @@ def chat_output17(bot, chat_id, update):
                  f' наша команда придёт в себя после празднования этого события!'
     set_chat_state(chat_id, 11)
     send_message_with_logged_in_keyboard(bot, chat_id, reply)
+
+
+def chat_output18(bot, chat_id, update):
+    user = get_current_user(chat_id)
+    if user['town'] is None:
+        town = "неизвестен"
+    else:
+        town = get_town_name(user['town'])
+    reply = f'Ваш город {town}.'
+    kb = [[telegram.KeyboardButton("Вернуться")],
+          [telegram.KeyboardButton("Сменить")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output19(bot, chat_id, update):
+    reply = f"Вы хотите сменить пароль?"
+    kb = [[telegram.KeyboardButton("Да")],
+          [telegram.KeyboardButton("Нет")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output20(bot, chat_id, update):
+    reply = f"Введите новый пароль"
+    bot.sendMessage(chat_id=chat_id, text=reply)
+
+
+def chat_output21(bot, chat_id, update):
+    reply = f"Пожалуйста повторите пароль"
+    bot.sendMessage(chat_id=chat_id, text=reply)
+
+
+def chat_output22(bot, chat_id, update):
+    reply = f"Введённые пароли не совпали. Пожалуйста введите новый пароль"
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    set_chat_state(chat_id, 20)
+
+
+def chat_output23(bot, chat_id, update):
+    reply = f'Введите название города или населённого пункта, в котором вы готовы выйти на митинг, когда придёт время'
+    bot.sendMessage(chat_id=chat_id, text=reply)
+
+
+def chat_output24(bot, chat_id, update):
+    reply = f'Город изменён. Спасибо.'
+    send_message_with_logged_in_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 11)
+
+
+def chat_output25(bot, chat_id, update):
+    reply = f'Пароль изменён. Обязательно запишите его! Серьёзно. Восстановить пароль невозможно!'
+    send_message_with_logged_in_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 11)
 
 
 def send_message_with_logged_in_keyboard(bot, chat_id, reply):
@@ -507,7 +610,9 @@ def shortbot(event, context):
     """
 
     bot = configure_telegram()
-
+    global DATABASE
+    DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
+                               cursorclass=pymysql.cursors.DictCursor, connect_timeout=30, read_timeout=30, write_timeout=30)
     if event.get('httpMethod') == 'POST' and event.get('body'):
         logger.info('Message received')
         update = telegram.Update.de_json(json.loads(event.get('body')), bot)
@@ -523,7 +628,12 @@ def shortbot(event, context):
             8: chat_reaction8,
             10: chat_reaction10,
             11: chat_reaction11,
-            14: chat_reaction14
+            14: chat_reaction14,
+            18: chat_reaction18,
+            19: chat_reaction19,
+            20: chat_reaction20,
+            21: chat_reaction21,
+            23: chat_reaction23
         }
         outputters = {
             0: chat_output0,
@@ -542,7 +652,15 @@ def shortbot(event, context):
             14: chat_output14,
             15: chat_output15,
             16: chat_output16,
-            17: chat_output17
+            17: chat_output17,
+            18: chat_output18,
+            19: chat_output19,
+            20: chat_output20,
+            21: chat_output21,
+            22: chat_output22,
+            23: chat_output23,
+            24: chat_output24,
+            25: chat_output25
         }
         if state in processors:
             newState = processors[state](bot, update)
@@ -562,8 +680,9 @@ def shortbot(event, context):
                    f' начало. '
             set_chat_state(chat_id, 0)
             bot.sendMessage(chat_id=chat_id, text=text)
-
+        DATABASE.close()
         return OK_RESPONSE
     else:
         logger.info("Unexpected!  " + event.get('body'))
+        DATABASE.close()
         return OK_RESPONSE
