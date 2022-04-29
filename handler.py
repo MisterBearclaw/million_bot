@@ -33,7 +33,7 @@ DB_DATABASE = os.environ.get('DB_DATABASE')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 
 DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                               cursorclass=pymysql.cursors.DictCursor)
+                           cursorclass=pymysql.cursors.DictCursor)
 
 
 def configure_telegram():
@@ -155,7 +155,7 @@ def chat_reaction0(bot, update):
     elif text == "Вход":
         return 1
     elif text == "Регистрация":
-        return 2
+        return 26
     else:
         return 0
 
@@ -253,7 +253,8 @@ def chat_reaction10(bot, update):
         parent = "NULL"
         if isinstance(inviting_user_id, numbers.Number):
             parent = inviting_user_id
-        cur.execute(f'INSERT INTO users (login, password, last_login, parentUserId, kidCount) VALUES("{login}", "{password_hash}", now(), {parent}, 0)')
+        cur.execute(
+            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount) VALUES("{login}", "{password_hash}", now(), {parent}, 0)')
         DATABASE.commit()
         new_user_id = cur.lastrowid
     with DATABASE.cursor() as cur:
@@ -263,7 +264,8 @@ def chat_reaction10(bot, update):
     for x in range(2):
         with DATABASE.cursor() as cur:
             invite_code = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(10))
-            cur.execute(f'INSERT INTO invites (invite, createdBy, usedBy, createdOn, usedOn) VALUES ("{invite_code}", {new_user_id}, NULL, now(), NULL)')
+            cur.execute(
+                f'INSERT INTO invites (invite, createdBy, usedBy, createdOn, usedOn) VALUES ("{invite_code}", {new_user_id}, NULL, now(), NULL)')
             DATABASE.commit()
     set_chat_context(chat_id, "")
     set_chat_user(chat_id, new_user_id)
@@ -358,6 +360,19 @@ def chat_reaction23(bot, update):
         cur.execute(f'UPDATE users SET town={town_id} WHERE id={user["id"]}')
         DATABASE.commit()
     return 24
+
+
+def chat_reaction26(bot, update):
+    answer = update.message.text.strip()
+    answer_int = None
+    if answer.isdigit():
+        answer_int = int(answer)
+    chat_id = update.message.chat.id
+    context = get_chat_context(chat_id)
+    if context['answer'] == answer_int:
+        return 2
+    else:
+        return 27
 
 
 def chat_output0(bot, chat_id, update):
@@ -586,6 +601,62 @@ def chat_output25(bot, chat_id, update):
     set_chat_state(chat_id, 11)
 
 
+def chat_output26(bot, chat_id, update):
+    reply = f'Прошу прощения за недоверие, но вы точно человек? Ботов на митинг не пускают:('
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    answer = random.randint(1, 10)
+    context = {'answer': answer}
+    set_chat_context(chat_id, json.dumps(context))
+    first_line = random.randint(1, answer)
+    second_line = answer - first_line
+    smiles = [{'smile': '😄😁😄😅', 'names': ['улыбок', 'смайлов', 'весёлых рожиц']},
+              {'smile': '😸😹😽', 'names': ['кошек', 'котов', 'котиков']},
+              {'smile': '✋', 'names': ['рук', 'ладоней', 'поднятых рук']},
+              {'smile': '❄', 'names': ['снежинок']},
+              {'smile': '❓❔', 'names': ['вопросов', 'вопросительных знаков', 'знаков вопроса']},
+              {'smile': '🚩', 'names': ['флажков', 'флагов']},
+              {'smile': '↖↘↗', 'names': ['стрелок', 'стрелочек']}]
+    selected_smiley = random.choice(smiles)
+    while True:
+        incorrect_smiley = random.choice(smiles)
+        if incorrect_smiley != selected_smiley:
+            break
+    while True:
+        incorrect_smiley2 = random.choice(smiles)
+        if incorrect_smiley2 != selected_smiley and incorrect_smiley2 != incorrect_smiley:
+            break
+    line1 = []
+    for i in range(first_line):
+        line1.append(random.choice(selected_smiley['smile']))
+    for i in range(10 - first_line):
+        if random.random() > 0.5:
+            line1.append(random.choice(incorrect_smiley['smile']))
+        else:
+            line1.append(random.choice(incorrect_smiley2['smile']))
+    line2 = []
+    for i in range(second_line):
+        line2.append(random.choice(selected_smiley['smile']))
+    for i in range(10 - second_line):
+        if random.random() > 0.5:
+            line2.append(random.choice(incorrect_smiley['smile']))
+        else:
+            line2.append(random.choice(incorrect_smiley2['smile']))
+    random.shuffle(line1)
+    random.shuffle(line2)
+    reply = ' '.join(line1)
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    reply = ' '.join(line2)
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    reply = f'Сколько я прислал {random.choice(selected_smiley["names"])}. Напишите пожалуйста ответ цифрой.'
+    bot.sendMessage(chat_id=chat_id, text=reply)
+
+
+def chat_output27(bot, chat_id, update):
+    reply = f'Ответ неправильный'
+    send_message_with_intro_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 0)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -612,7 +683,8 @@ def shortbot(event, context):
     bot = configure_telegram()
     global DATABASE
     DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
-                               cursorclass=pymysql.cursors.DictCursor, connect_timeout=30, read_timeout=30, write_timeout=30)
+                               cursorclass=pymysql.cursors.DictCursor, connect_timeout=30, read_timeout=30,
+                               write_timeout=30)
     if event.get('httpMethod') == 'POST' and event.get('body'):
         logger.info('Message received')
         update = telegram.Update.de_json(json.loads(event.get('body')), bot)
@@ -633,7 +705,8 @@ def shortbot(event, context):
             19: chat_reaction19,
             20: chat_reaction20,
             21: chat_reaction21,
-            23: chat_reaction23
+            23: chat_reaction23,
+            26: chat_reaction26
         }
         outputters = {
             0: chat_output0,
@@ -660,7 +733,9 @@ def shortbot(event, context):
             22: chat_output22,
             23: chat_output23,
             24: chat_output24,
-            25: chat_output25
+            25: chat_output25,
+            26: chat_output26,
+            27: chat_output27
         }
         if state in processors:
             newState = processors[state](bot, update)
