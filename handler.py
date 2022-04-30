@@ -124,6 +124,12 @@ def update_password(chat_id, new_password):
     DATABASE.commit()
 
 
+def update_user_last_login(user_id):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE users SET last_login=now() WHERE id = {user_id};')
+    DATABASE.commit()
+
+
 def get_current_user(chat_id):
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT users.* FROM users INNER JOIN chats ON users.id = chats.affiliatedUser'
@@ -155,6 +161,12 @@ def chat_reaction0(bot, update):
     elif text == "Вход":
         return 1
     elif text == "Регистрация":
+        chat_id = update.message.chat.id
+        with DATABASE.cursor() as cur:
+            cur.execute(f'SELECT * FROM chats where id="{chat_id}"')
+            chat = cur.fetchone()
+            if chat['createdUserCount'] > 3:
+                return 28
         return 26
     else:
         return 0
@@ -179,6 +191,7 @@ def chat_reaction1(bot, update):
                     'Важно - если вы волнуетесь о безопасности - я вас помним по техническому номеру чата. Я не знаю' \
                     ' и не сохраняю никаких личных данных по которым вас можно было бы идентифицировать.'
             bot.sendMessage(chat_id=chat_id, text=reply)
+            update_user_last_login(user['id'])
             return 11
     context = {'user': user['id'], 'hash': user['password']}
     set_chat_context(chat_id, json.dumps(context))
@@ -296,6 +309,7 @@ def chat_reaction14(bot, update):
     context = get_chat_context(chat_id)
     if context['hash'] == password_hash:
         set_chat_user(chat_id, context['user'])
+        update_user_last_login(context['user'])
         return 11
     return 15
 
@@ -657,6 +671,12 @@ def chat_output27(bot, chat_id, update):
     set_chat_state(chat_id, 0)
 
 
+def chat_output28(bot, chat_id, update):
+    reply = f'Превышен лимит регистраций'
+    send_message_with_intro_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 0)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -735,7 +755,8 @@ def shortbot(event, context):
             24: chat_output24,
             25: chat_output25,
             26: chat_output26,
-            27: chat_output27
+            27: chat_output27,
+            28: chat_output28
         }
         if state in processors:
             newState = processors[state](bot, update)
