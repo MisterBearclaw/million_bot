@@ -130,6 +130,12 @@ def update_user_last_login(user_id):
     DATABASE.commit()
 
 
+def increase_chat_user_creation(chat_id):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE chats SET createdUsercount = createdUsercount + 1 WHERE id = {chat_id};')
+    DATABASE.commit()
+
+
 def get_current_user(chat_id):
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT users.* FROM users INNER JOIN chats ON users.id = chats.affiliatedUser'
@@ -282,6 +288,7 @@ def chat_reaction10(bot, update):
             DATABASE.commit()
     set_chat_context(chat_id, "")
     set_chat_user(chat_id, new_user_id)
+    increase_chat_user_creation(chat_id)
     return 11
 
 
