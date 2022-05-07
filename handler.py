@@ -188,17 +188,6 @@ def chat_reaction1(bot, update):
             return 13
         user = cur.fetchone()
         chat_id = update.message.chat.id
-
-    with DATABASE.cursor() as cur:
-        cur.execute(f'SELECT * FROM chats WHERE id={chat_id}')
-        chat = cur.fetchone()
-        if chat['affiliatedUser'] == user['id']:
-            reply = 'Я вас помню. Вхоите пожалуйста без пароля.\n' \
-                    'Важно - если вы волнуетесь о безопасности - я вас помним по техническому номеру чата. Я не знаю' \
-                    ' и не сохраняю никаких личных данных по которым вас можно было бы идентифицировать.'
-            bot.sendMessage(chat_id=chat_id, text=reply)
-            update_user_last_login(user['id'])
-            return 11
     context = {'user': user['id'], 'hash': user['password']}
     set_chat_context(chat_id, json.dumps(context))
     return 14
