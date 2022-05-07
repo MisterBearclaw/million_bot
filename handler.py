@@ -163,6 +163,9 @@ def try_to_delete_message(bot, chat_id, update):
 def chat_reaction0(bot, update):
     text = update.message.text
     if text == "Подробности":
+        context = {'return': 0}
+        chat_id = update.message.chat.id
+        set_chat_context(chat_id, json.dumps(context))
         return 3
     elif text == "Вход":
         return 1
@@ -293,6 +296,11 @@ def chat_reaction11(bot, update):
         return 19
     elif text == "Выход":
         return 0
+    elif text == "Подробности":
+        context = {'return': 11}
+        chat_id = update.message.chat.id
+        set_chat_context(chat_id, json.dumps(context))
+        return 3
     else:
         return 11
 
@@ -408,7 +416,11 @@ def chat_output3(bot, chat_id, update):
     reply = 'Тут будет простыня текста про то что мы вообще такое делаем и как оно работает. Даня, Серж, напишите её ' \
             'пожалуйста '
     send_message_with_intro_keyboard(bot, chat_id, reply)
-    set_chat_state(chat_id, 0)
+    context = get_chat_context(chat_id)
+    if context['return'] is None:
+        set_chat_state(chat_id, 0)
+    else:
+        set_chat_state(chat_id, context['return'])
     logger.info('Message sent')
 
 
@@ -678,6 +690,7 @@ def send_message_with_logged_in_keyboard(bot, chat_id, reply):
           [telegram.KeyboardButton("Общая картина")],
           [telegram.KeyboardButton("Мой город")],
           [telegram.KeyboardButton("Сменить пароль")],
+          [telegram.KeyboardButton("Подробности")],
           [telegram.KeyboardButton("Выход")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
