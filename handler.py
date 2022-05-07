@@ -117,6 +117,22 @@ def increment_child_count(user_id):
                 increment_child_count(parent)
 
 
+def decrement_child_count(user_id):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT * FROM users where id={user_id}')
+        if cur.rowcount == 1:
+            user = cur.fetchone()
+            kid_count = user['kidCount']
+            if not isinstance(kid_count, numbers.Number):
+                kid_count = 0
+            kid_count = kid_count - 1
+            cur.execute(f'UPDATE users SET kidCount={kid_count} WHERE id={user_id}')
+            DATABASE.commit()
+            parent = user['parentUserId']
+            if isinstance(parent, numbers.Number):
+                increment_child_count(parent)
+
+
 def update_password(chat_id, new_password):
     with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE users SET password="{new_password}" WHERE '
@@ -301,6 +317,8 @@ def chat_reaction11(bot, update):
         chat_id = update.message.chat.id
         set_chat_context(chat_id, json.dumps(context))
         return 3
+    elif text == "Удалить аккаунт":
+        return 29
     else:
         return 11
 
@@ -391,6 +409,25 @@ def chat_reaction26(bot, update):
         return 2
     else:
         return 27
+
+
+def chat_reaction29(bot, update):
+    text = update.message.text.lower()
+    if text != "удалить":
+        return 11
+    chat_id = update.message.chat.id
+    user = get_current_user(chat_id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
+        DATABASE.commit()
+    decrement_child_count(user['parentUserId'])
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE chats SET affiliatedUser = NULL, createdUserCount = 0 WHERE affiliatedUser = {user["id"]}')
+        DATABASE.commit()
+    with DATABASE.cursor() as cur:
+        cur.execute(f'DELETE FROM users WHERE id = {user["id"]}')
+        DATABASE.commit()
+    return 30
 
 
 def chat_output0(bot, chat_id, update):
@@ -685,13 +722,28 @@ def chat_output28(bot, chat_id, update):
     set_chat_state(chat_id, 0)
 
 
+def chat_output29(bot, chat_id, update):
+    reply = f'Вы больше не хотите или не можете быть частью мирного гражданского сопротивления в России?\n' \
+            f'Для подтверждения удаления аккаунта напишите в ответ слово "удалить"'
+    kb = [[telegram.KeyboardButton("Вернуться")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output30(bot, chat_id, update):
+    reply = f'Ваш аккаунт был удалён'
+    send_message_with_intro_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 0)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
           [telegram.KeyboardButton("Мой город")],
           [telegram.KeyboardButton("Сменить пароль")],
           [telegram.KeyboardButton("Подробности")],
-          [telegram.KeyboardButton("Выход")]]
+          [telegram.KeyboardButton("Выход")],
+          [telegram.KeyboardButton("Удалить аккаунт")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
@@ -735,7 +787,8 @@ def shortbot(event, context):
             20: chat_reaction20,
             21: chat_reaction21,
             23: chat_reaction23,
-            26: chat_reaction26
+            26: chat_reaction26,
+            29: chat_reaction29
         }
         outputters = {
             0: chat_output0,
@@ -765,7 +818,9 @@ def shortbot(event, context):
             25: chat_output25,
             26: chat_output26,
             27: chat_output27,
-            28: chat_output28
+            28: chat_output28,
+            29: chat_output29,
+            30: chat_output30
         }
         if state in processors:
             newState = processors[state](bot, update)
