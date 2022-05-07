@@ -171,7 +171,7 @@ def chat_reaction0(bot, update):
         with DATABASE.cursor() as cur:
             cur.execute(f'SELECT * FROM chats where id="{chat_id}"')
             chat = cur.fetchone()
-            if chat['createdUserCount'] > 3:
+            if chat['createdUserCount'] > 1:
                 return 28
         return 26
     else:
