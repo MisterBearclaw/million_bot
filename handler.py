@@ -452,12 +452,17 @@ def chat_output2(bot, chat_id, update):
 def chat_output3(bot, chat_id, update):
     reply = 'Тут будет простыня текста про то что мы вообще такое делаем и как оно работает. Даня, Серж, напишите её ' \
             'пожалуйста '
-    send_message_with_intro_keyboard(bot, chat_id, reply)
+
     context = get_chat_context(chat_id)
     if context['return'] is None:
-        set_chat_state(chat_id, 0)
+        state = 0
     else:
-        set_chat_state(chat_id, context['return'])
+        state = context['return']
+    if state == 0:
+        send_message_with_intro_keyboard(bot, chat_id, reply)
+    else:
+        send_message_with_logged_in_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, state)
     logger.info('Message sent')
 
 
