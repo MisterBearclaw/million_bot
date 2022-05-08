@@ -31,6 +31,7 @@ DB_USER = os.environ.get('DB_USER')
 DB_PASSWORD = os.environ.get('DB_PASSWORD')
 DB_DATABASE = os.environ.get('DB_DATABASE')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+BROADCAST_CODE = os.environ.get('BROADCAST_CODE')
 
 DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
                            cursorclass=pymysql.cursors.DictCursor)
@@ -430,6 +431,27 @@ def chat_reaction29(bot, update):
     return 30
 
 
+def chat_reaction31(bot, update):
+    text = update.message.text
+    if text == "Отмена":
+        return 0
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT * FROM chats')
+        chats = cur.fetchall()
+    success = 0
+    fail = 0
+    for chat in chats:
+        try:
+            bot.sendMessage(chat_id=chat['id'], text=text)
+            success += 1
+        except:
+            fail += 1
+    chat_id = update.message.chat.id
+    reply = f"Сообщение разослано {fail+success} раз. {100 * success / (success + fail):.2f}% успешно"
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    return 0
+
+
 def chat_output0(bot, chat_id, update):
     reply = 'Добро пожаловать.\n' \
             'Нас будет миллион!'
@@ -741,6 +763,13 @@ def chat_output30(bot, chat_id, update):
     set_chat_state(chat_id, 0)
 
 
+def chat_output31(bot, chat_id, update):
+    reply = f'Включён режим широковещания. Ваше следующее сообщение будет отослано всем!'
+    kb = [[telegram.KeyboardButton("Отмена")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -793,7 +822,8 @@ def shortbot(event, context):
             21: chat_reaction21,
             23: chat_reaction23,
             26: chat_reaction26,
-            29: chat_reaction29
+            29: chat_reaction29,
+            31: chat_reaction31
         }
         outputters = {
             0: chat_output0,
@@ -825,18 +855,23 @@ def shortbot(event, context):
             27: chat_output27,
             28: chat_output28,
             29: chat_output29,
-            30: chat_output30
+            30: chat_output30,
+            31: chat_output31
         }
-        if state in processors:
-            newState = processors[state](bot, update)
-            logger.info(f'New state is {newState}')
-            if newState != state:
-                set_chat_state(chat_id, newState)
-                state = newState
+        if update.message.text == BROADCAST_CODE:
+            set_chat_state(chat_id, 31)
+            state = 31
         else:
-            text = f'Чат в неожиданном состоянии {state}. MrBearclaw еще работает'
-            bot.sendMessage(chat_id=chat_id, text=text)
-            logger.info('Message sent')
+            if state in processors:
+                newState = processors[state](bot, update)
+                logger.info(f'New state is {newState}')
+                if newState != state:
+                    set_chat_state(chat_id, newState)
+                    state = newState
+            else:
+                text = f'Чат в неожиданном состоянии {state}. MrBearclaw еще работает'
+                bot.sendMessage(chat_id=chat_id, text=text)
+                logger.info('Message sent')
 
         if state in outputters:
             outputters[state](bot, chat_id, update)
