@@ -32,6 +32,7 @@ DB_PASSWORD = os.environ.get('DB_PASSWORD')
 DB_DATABASE = os.environ.get('DB_DATABASE')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 BROADCAST_CODE = os.environ.get('BROADCAST_CODE')
+REPLY_CODE =  os.environ.get('REPLY_CODE')
 
 DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
                            cursorclass=pymysql.cursors.DictCursor)
@@ -318,6 +319,8 @@ def chat_reaction11(bot, update):
         chat_id = update.message.chat.id
         set_chat_context(chat_id, json.dumps(context))
         return 3
+    elif text == "Обратная связь":
+        return 32
     elif text == "Удалить аккаунт":
         return 29
     else:
@@ -450,6 +453,46 @@ def chat_reaction31(bot, update):
     reply = f"Сообщение разослано {fail+success} раз. {100 * success / (success + fail):.2f}% успешно"
     bot.sendMessage(chat_id=chat_id, text=reply)
     return 0
+
+
+def chat_reaction32(bot, update):
+    text = update.message.text
+    if len(text) > 1024:
+        text = text[-1024:]
+    if text == "Назад":
+        return 11
+    text = text.replace('\'', '').replace('\"', '').replace('\\', '')
+    user = get_current_user(update.message.chat.id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f"INSERT INTO million.tickets (user_id, creation_date, question, answer, is_answered)"
+                    f" VALUES({user['id']}, now(), '{text}', NULL, 0);")
+        DATABASE.commit()
+    return 11
+
+
+def chat_reaction33(bot, update):
+    text = update.message.text
+    if len(text) > 1024:
+        text = text[-1024:]
+    if text == "Назад":
+        return 0
+    if text == "Ответ не нужен":
+        text = ''
+    context = get_chat_context(update.message.chat.id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f"SELECT * FROM tickets WHERE id={context['ticket']}")
+        ticket = cur.fetchone()
+    text = text.replace('"', '')
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE tickets SET answer="{text}", is_answered=1 WHERE id={context["ticket"]}')
+        DATABASE.commit()
+
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT * FROM chats WHERE affiliatedUser={ticket["user_id"]}')
+        if cur.rowcount != 0:
+            author_chat = cur.fetchone()
+            bot.sendMessage(chat_id=author_chat['id'], text="Получен ответ на Ваш вопрос")
+    return 33
 
 
 def chat_output0(bot, chat_id, update):
@@ -770,24 +813,99 @@ def chat_output31(bot, chat_id, update):
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
 
-def send_message_with_logged_in_keyboard(bot, chat_id, reply):
+def chat_output32(bot, chat_id, update):
+    reply = f'*_Обратная связь_*\n\n'
+    can_send = True
+    messages = ''
+    user = get_current_user(chat_id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f"SELECT * FROM tickets WHERE user_id={user['id']} ORDER BY creation_date DESC")
+        tickets = cur.fetchall()
+        for ticket in tickets:
+            if ticket['is_answered'] == 0:
+                can_send = False
+            else:
+                answer = escape_tg(ticket['answer'])
+                messages = f"*Ответ:*\n{answer}\n\n" + messages
+            question = escape_tg(ticket['question'])
+            messages = f"*Вопрос:*\n{question}\n" + messages
+            if len(messages) > 2048:
+                continue
+    reply += messages
+    if can_send:
+        reply += '\n\nВы можете послать нам одно сообщение\\. После отсылки вы не сможете послать других до тех пор,' \
+                 ' пока мы не ответим\\. Отредактировать сообщение будет нельзя\\. Максимальный размер ограничен 1000' \
+                 'символов\\.'
+    else:
+        reply += '\n\nВы не можете посылать нам сообщения пока мы вам не ответим\\.'
+
+    if can_send:
+        kb = [[telegram.KeyboardButton("Назад")]]
+        kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode='MarkdownV2')
+    else:
+        send_message_with_logged_in_keyboard(bot, chat_id, reply, 'MarkdownV2')
+        set_chat_state(chat_id, 11)
+
+
+def chat_output33(bot, chat_id, update):
+    reply = f'*_Ответы на обратную связь_*\n\n'
+    with DATABASE.cursor() as cur:
+        cur.execute(f"SELECT * FROM tickets WHERE is_answered=0 ORDER BY creation_date ASC LIMIT 1")
+        if cur.rowcount == 0:
+            reply += "Ни у кого никаких вопросов\\."
+            set_chat_state(chat_id, 0)
+            send_message_with_intro_keyboard(bot, chat_id, reply, 'MarkdownV2')
+        ticket = cur.fetchone()
+    context = {'ticket': ticket['id']}
+    set_chat_context(chat_id, json.dumps(context));
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT * FROM users WHERE id={ticket["user_id"]}')
+        if cur.rowcount == 0:
+            username = "Некто"
+        else:
+            user = cur.fetchone()
+            username = user['login']
+    reply += f"_{username}_ спрашивает \n"
+    reply += escape_tg(ticket['question'])
+    kb = [[telegram.KeyboardButton("Ответ не нужен")],
+          [telegram.KeyboardButton("Назад")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode='MarkdownV2')
+
+
+def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
           [telegram.KeyboardButton("Мой город")],
           [telegram.KeyboardButton("Сменить пароль")],
           [telegram.KeyboardButton("Подробности")],
           [telegram.KeyboardButton("Выход")],
+          [telegram.KeyboardButton("Обратная связь")],
           [telegram.KeyboardButton("Удалить аккаунт")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
-    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+    if parse_mode is not None:
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode=parse_mode)
+    else:
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
 
-def send_message_with_intro_keyboard(bot, chat_id, reply):
+def send_message_with_intro_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Вход")],
           [telegram.KeyboardButton("Регистрация")],
           [telegram.KeyboardButton("Подробности")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
-    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+    if parse_mode is not None:
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode=parse_mode)
+    else:
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def escape_tg(in_string):
+    return in_string.replace('\\', '\\\\').replace('.', '\\.').replace('_', '\\_').replace('*', '\\*').replace(
+        '[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace(
+        '`', '\\´').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace(
+        '=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('!', '\\!')
 
 
 def shortbot(event, context):
@@ -823,7 +941,9 @@ def shortbot(event, context):
             23: chat_reaction23,
             26: chat_reaction26,
             29: chat_reaction29,
-            31: chat_reaction31
+            31: chat_reaction31,
+            32: chat_reaction32,
+            33: chat_reaction33
         }
         outputters = {
             0: chat_output0,
@@ -856,11 +976,16 @@ def shortbot(event, context):
             28: chat_output28,
             29: chat_output29,
             30: chat_output30,
-            31: chat_output31
+            31: chat_output31,
+            32: chat_output32,
+            33: chat_output33
         }
         if update.message.text == BROADCAST_CODE:
             set_chat_state(chat_id, 31)
             state = 31
+        elif update.message.text == REPLY_CODE:
+            set_chat_state(chat_id, 33)
+            state = 33
         else:
             if state in processors:
                 newState = processors[state](bot, update)
