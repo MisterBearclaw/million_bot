@@ -763,7 +763,6 @@ def send_message_with_intro_keyboard(bot, chat_id, reply):
 
 
 def send_current_state_image(bot, chat_id):
-
     bot.send_photo(chat_id=chat_id)
 
 
