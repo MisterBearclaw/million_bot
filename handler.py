@@ -9,6 +9,7 @@ import string
 import random
 from datetime import datetime
 import datetime
+import texts
 
 # Logging is cool!
 logger = logging.getLogger()
@@ -32,7 +33,7 @@ DB_PASSWORD = os.environ.get('DB_PASSWORD')
 DB_DATABASE = os.environ.get('DB_DATABASE')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 BROADCAST_CODE = os.environ.get('BROADCAST_CODE')
-REPLY_CODE =  os.environ.get('REPLY_CODE')
+REPLY_CODE = os.environ.get('REPLY_CODE')
 
 DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
                            cursorclass=pymysql.cursors.DictCursor)
@@ -232,7 +233,7 @@ def chat_reaction2(bot, update):
 
 
 def chat_reaction4(bot, update):
-    reply = 'Из соображений безопастности ваш сеанс был завершён. Пожалуйста войдите еще раз.'
+    reply = texts['safety_logout']
     chat_id = update.message.chat.id
     bot.sendMessage(chat_id=chat_id, text=reply)
     set_chat_context(chat_id, "")
@@ -444,7 +445,7 @@ def chat_reaction31(bot, update):
         except:
             fail += 1
     chat_id = update.message.chat.id
-    reply = f"Сообщение разослано {fail+success} раз. {100 * success / (success + fail):.2f}% успешно"
+    reply = f"Сообщение разослано {fail + success} раз. {100 * success / (success + fail):.2f}% успешно"
     bot.sendMessage(chat_id=chat_id, text=reply)
     return 0
 
@@ -490,27 +491,22 @@ def chat_reaction33(bot, update):
 
 
 def chat_output0(bot, chat_id, update):
-    reply = 'Добро пожаловать.\n' \
-            'Нас будет миллион!'
+    reply = texts[0]
     send_message_with_intro_keyboard(bot, chat_id, reply)
-    logger.info('Message sent')
 
 
 def chat_output1(bot, chat_id, update):
-    reply = 'Ведите имя пользователя'
+    reply = texts[1]
     bot.sendMessage(chat_id=chat_id, text=reply)
-    logger.info('Message sent')
 
 
 def chat_output2(bot, chat_id, update):
-    reply = 'Ведите код приглашения'
+    reply = texts[2]
     bot.sendMessage(chat_id=chat_id, text=reply)
-    logger.info('Message sent')
 
 
 def chat_output3(bot, chat_id, update):
-    reply = 'Тут будет простыня текста про то что мы вообще такое делаем и как оно работает. Даня, Серж, напишите её ' \
-            'пожалуйста '
+    reply = texts[3]
 
     context = get_chat_context(chat_id)
     if context['return'] is None:
@@ -526,77 +522,65 @@ def chat_output3(bot, chat_id, update):
 
 
 def chat_output5(bot, chat_id, update):
-    reply = 'Приглашение с таким кодом не найдено.'
+    reply = texts[5]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
     logger.info('Message sent')
 
 
 def chat_output6(bot, chat_id, update):
-    reply = 'Это прииглашение уже использовано. Если это были вы, попробуйте войти. Если вы потеряли доступ к логину' \
-            ' или паролю - я никак не могу вам помочь из соображений безопасности. Ваш логин виден тому, кто дал вам ' \
-            'приглашение.'
+    reply = texts[6]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
 
 
 def chat_output7(bot, chat_id, update):
-    reply = 'Приумайте имя пользователя (логин).\n' \
-            'Обратите внимание, ваш логин будет сообщён тому, кто дал вам приглашение. Не регистрируйтесь, если вы' \
-            ' ему не доверяете!'
+    reply = texts[7]
     bot.sendMessage(chat_id=chat_id, text=reply)
-    logger.info('Message sent')
 
 
 def chat_output8(bot, chat_id, update):
     bot.delete_message(chat_id, update.message.message_id)
-    reply = 'Отлично! Теперь придумайте пароль.'
+    reply = texts[8]
     bot.sendMessage(chat_id=chat_id, text=reply)
-    logger.info('Message sent')
 
 
 def chat_output9(bot, chat_id, update):
-    reply = 'Это имя пользователя уже занято. Попробуйте еще раз.\n' \
-            'Обратите внимание, ваш логин будет сообщён тому, кто дал вам приглашение. Не регистрируйтесь, если вы' \
-            ' ему не доверяете!'
+    reply = texts[9]
     bot.sendMessage(chat_id=chat_id, text=reply)
     set_chat_state(chat_id, 7)
-    logger.info('Message sent')
 
 
 def chat_output10(bot, chat_id, update):
-    reply = 'Спасибо! Повторите пожалуйста пароль.'
+    reply = texts[10]
     bot.sendMessage(chat_id=chat_id, text=reply)
-    logger.info('Message sent')
 
 
 def chat_output11(bot, chat_id, update):
-    reply = 'Добро пожаловать, вы вошли в систему!'
+    reply = texts[11]
     send_message_with_logged_in_keyboard(bot, chat_id, reply)
 
 
 def chat_output12(bot, chat_id, update):
-    reply = 'Пароли не совпали! Придумайте пожалуйста пароль.'
+    reply = texts[12]
     bot.sendMessage(chat_id=chat_id, text=reply)
     set_chat_state(chat_id, 8)
-    logger.info('Message sent')
 
 
 def chat_output13(bot, chat_id, update):
-    reply = 'Такое имя пользователя в базе не зарегистрировано. Если вы забыли имя пользователя, то его знает тот,' \
-            ' кто дал вам приглашение.'
+    reply = texts[13]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
     logger.info('Message sent')
 
 
 def chat_output14(bot, chat_id, update):
-    reply = 'Введите пароль.'
+    reply = texts[14]
     bot.sendMessage(chat_id=chat_id, text=reply)
 
 
 def chat_output15(bot, chat_id, update):
-    reply = 'Пароль не совпадает. Попробуйте еще раз.'
+    reply = texts[15]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
 
@@ -631,9 +615,9 @@ def chat_output16(bot, chat_id, update):
 
         bot.sendMessage(chat_id=chat_id, text=message)
     if total_unused == 0:
-        reply = "Спасибо за то, что вы пригласили друзей!"
+        reply = texts['thanks_for_inviting']
     else:
-        reply = "Пожалуйста, не забудьте приласить ваших друзей и знакомых! Не дайте цепочке разорваться на вас!"
+        reply = texts['dont_forget_to_invite']
     send_message_with_logged_in_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 11)
 
@@ -684,7 +668,7 @@ def chat_output18(bot, chat_id, update):
 
 
 def chat_output19(bot, chat_id, update):
-    reply = f"Вы хотите сменить пароль?"
+    reply = texts[19]
     kb = [[telegram.KeyboardButton("Да")],
           [telegram.KeyboardButton("Нет")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
@@ -692,40 +676,40 @@ def chat_output19(bot, chat_id, update):
 
 
 def chat_output20(bot, chat_id, update):
-    reply = f"Введите новый пароль"
+    reply = texts[20]
     bot.sendMessage(chat_id=chat_id, text=reply)
 
 
 def chat_output21(bot, chat_id, update):
-    reply = f"Пожалуйста повторите пароль"
+    reply = texts[21]
     bot.sendMessage(chat_id=chat_id, text=reply)
 
 
 def chat_output22(bot, chat_id, update):
-    reply = f"Введённые пароли не совпали. Пожалуйста введите новый пароль"
+    reply = texts[22]
     bot.sendMessage(chat_id=chat_id, text=reply)
     set_chat_state(chat_id, 20)
 
 
 def chat_output23(bot, chat_id, update):
-    reply = f'Введите название города или населённого пункта, в котором вы готовы выйти на митинг, когда придёт время'
+    reply = texts[23]
     bot.sendMessage(chat_id=chat_id, text=reply)
 
 
 def chat_output24(bot, chat_id, update):
-    reply = f'Город изменён. Спасибо.'
+    reply = texts[24]
     send_message_with_logged_in_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 11)
 
 
 def chat_output25(bot, chat_id, update):
-    reply = f'Пароль изменён. Обязательно запишите его! Серьёзно. Восстановить пароль невозможно!'
+    reply = texts[25]
     send_message_with_logged_in_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 11)
 
 
 def chat_output26(bot, chat_id, update):
-    reply = f'Прошу прощения за недоверие, но вы точно человек? Ботов на митинг не пускают:('
+    reply = texts[26]
     bot.sendMessage(chat_id=chat_id, text=reply)
     answer = random.randint(1, 10)
     context = {'answer': answer}
@@ -775,33 +759,32 @@ def chat_output26(bot, chat_id, update):
 
 
 def chat_output27(bot, chat_id, update):
-    reply = f'Ответ неправильный'
+    reply = texts[27]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
 
 
 def chat_output28(bot, chat_id, update):
-    reply = f'Превышен лимит регистраций'
+    reply = texts[28]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
 
 
 def chat_output29(bot, chat_id, update):
-    reply = f'Вы больше не хотите или не можете быть частью мирного гражданского сопротивления в России?\n' \
-            f'Для подтверждения удаления аккаунта напишите в ответ слово "удалить"'
+    reply = texts[29]
     kb = [[telegram.KeyboardButton("Вернуться")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
 
 def chat_output30(bot, chat_id, update):
-    reply = f'Ваш аккаунт был удалён'
+    reply = texts[30]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
 
 
 def chat_output31(bot, chat_id, update):
-    reply = f'Включён режим широковещания. Ваше следующее сообщение будет отослано всем!'
+    reply = texts[31]
     kb = [[telegram.KeyboardButton("Отмена")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
@@ -870,9 +853,7 @@ def chat_output33(bot, chat_id, update):
 
 
 def chat_output34(bot, chat_id, update):
-    reply = f'В нашей системе нет населённого пункта с таким названием. Пожалуйста проверьте правописание. Если вы ' \
-            f'уверены в названии населённого пункта и хотели бы выйти на протест именно в нём воспользуйтесь ' \
-            f'пожалуйста функцией обратной связи. '
+    reply = texts[34]
     send_message_with_logged_in_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 11)
 
