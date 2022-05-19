@@ -9,7 +9,7 @@ import string
 import random
 from datetime import datetime
 import datetime
-import texts
+from texts import texts
 
 # Logging is cool!
 logger = logging.getLogger()
