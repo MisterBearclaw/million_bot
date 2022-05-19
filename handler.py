@@ -580,6 +580,7 @@ def chat_output16(bot, chat_id, update):
 
 
 def chat_output17(bot, chat_id, update):
+    send_current_state_image(bot, chat_id)
     with DATABASE.cursor() as cur:
         cur.execute("SELECT count(*) AS numUsers FROM users")
         count = cur.fetchone()
@@ -759,6 +760,11 @@ def send_message_with_intro_keyboard(bot, chat_id, reply):
           [telegram.KeyboardButton("Подробности")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def send_current_state_image(bot, chat_id):
+
+    bot.send_photo(chat_id=chat_id)
 
 
 def shortbot(event, context):
