@@ -388,13 +388,7 @@ def chat_reaction23(bot, update):
             town = cur.fetchone()
             town_id = town['id']
     if town_id is None:
-        with DATABASE.cursor() as cur:
-            cur.execute(f'INSERT INTO towns (town, key_idx) VALUES ("{town_name}", 1)')
-            DATABASE.commit()
-            town_id = cur.lastrowid
-        with DATABASE.cursor() as cur:
-            cur.execute(f'UPDATE towns SET key_idx={town_id} WHERE id={town_id}')
-            DATABASE.commit()
+        return 34
 
     with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE users SET town={town_id} WHERE id={user["id"]}')
@@ -856,6 +850,7 @@ def chat_output33(bot, chat_id, update):
             reply += "Ни у кого никаких вопросов\\."
             set_chat_state(chat_id, 0)
             send_message_with_intro_keyboard(bot, chat_id, reply, 'MarkdownV2')
+            return
         ticket = cur.fetchone()
     context = {'ticket': ticket['id']}
     set_chat_context(chat_id, json.dumps(context));
@@ -872,6 +867,14 @@ def chat_output33(bot, chat_id, update):
           [telegram.KeyboardButton("Назад")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode='MarkdownV2')
+
+
+def chat_output34(bot, chat_id, update):
+    reply = f'В нашей системе нет населённого пункта с таким названием. Пожалуйста проверьте правописание. Если вы ' \
+            f'уверены в названии населённого пункта и хотели бы выйти на протест именно в нём воспользуйтесь ' \
+            f'пожалуйста функцией обратной связи. '
+    send_message_with_logged_in_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 11)
 
 
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
@@ -978,7 +981,8 @@ def shortbot(event, context):
             30: chat_output30,
             31: chat_output31,
             32: chat_output32,
-            33: chat_output33
+            33: chat_output33,
+            34: chat_output34
         }
         if update.message.text == BROADCAST_CODE:
             set_chat_state(chat_id, 31)
