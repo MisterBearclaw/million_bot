@@ -10,6 +10,7 @@ import random
 from datetime import datetime
 import datetime
 from texts import texts
+from PIL import Image
 
 # Logging is cool!
 logger = logging.getLogger()
