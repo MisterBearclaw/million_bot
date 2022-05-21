@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+from math import floor, log10
 import telegram
 import pymysql
 import numbers
@@ -10,7 +11,8 @@ import random
 from datetime import datetime
 import datetime
 from texts import texts
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 # Logging is cool!
 logger = logging.getLogger()
@@ -285,7 +287,7 @@ def chat_reaction10(bot, update):
         if isinstance(inviting_user_id, numbers.Number):
             parent = inviting_user_id
         cur.execute(
-            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount) VALUES("{login}", "{password_hash}", now(), {parent}, 0)')
+            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount, createdOn) VALUES("{login}", "{password_hash}", now(), {parent}, 0, CURDATE())')
         DATABASE.commit()
         new_user_id = cur.lastrowid
     with DATABASE.cursor() as cur:
@@ -895,7 +897,122 @@ def escape_tg(in_string):
 
 
 def send_current_state_image(bot, chat_id):
-    bot.send_photo(chat_id=chat_id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT num FROM(    select count(*) as num from users u where u.createdOn <= CURDATE() - 0    '
+                    f'UNION ALL select count(*) as c from users u where u.createdOn <= CURDATE() - 1    UNION ALL '
+                    f'select count(*) as c from users u where u.createdOn <= CURDATE() - 2    UNION ALL select count('
+                    f'*) as c from users u where u.createdOn <= CURDATE() - 3    UNION All select count(*) as c from '
+                    f'users u where u.createdOn <= CURDATE() - 4   UNION All select count(*) as c from users u where '
+                    f'u.createdOn <= CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn '
+                    f'<= CURDATE() - 6 UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() '
+                    f'UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() - 1    UNION ALL '
+                    f'select count(*) as c from users u where u.createdOn = CURDATE() - 2    UNION ALL select count('
+                    f'*) as c from users u where u.createdOn = CURDATE() - 3    UNION All select count(*) as c from '
+                    f'users u where u.createdOn = CURDATE() - 4    UNION All select count(*) as c from users u where '
+                    f'u.createdOn = CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn = '
+                    f'CURDATE() - 6) as sums')  # if you are trying to read it, well... oops:)
+        sums = cur.fetchall()
+    max_val = sums[0]['num']
+    min_val = sums[6]['num']
+    min_reg_val = max_reg_val = sums[7]['num']
+    for i in range(8, 14):
+        if min_reg_val>sums[i]['num']:
+            min_reg_val = sums[i]['num']
+        if max_reg_val < sums[i]['num']:
+            max_reg_val = sums[i]['num']
+    order_of_magnitude = floor(log10(max_val))
+    order_of_reg_magnitude = floor(log10(max_reg_val))
+    max_graph_val = ((max_val // (10**order_of_magnitude)) + 1) * 10**order_of_magnitude
+    max_graph_reg_val = ((max_reg_val // (10 ** order_of_reg_magnitude)) + 1) * 10 ** order_of_reg_magnitude
+    min_graph_val = max_graph_val
+    while min_graph_val > min_val:
+        min_graph_val -= 10**order_of_magnitude
+    graph_range_y = max_graph_val - min_graph_val
+    min_graph_reg_val = max_graph_reg_val
+    while min_graph_reg_val > min_reg_val:
+        min_graph_reg_val -= 10 ** order_of_reg_magnitude
+    graph_range_reg_y = max_graph_reg_val - min_graph_reg_val
+
+    width = 300
+    height = 300
+    arrow_length = 3
+    arrow_width = 2
+    padding = 20
+    offset_x = 10
+    offset_y = 10
+    value_zone_y = height - 2*padding - 2*offset_y
+    value_zone_x = width - 2 * padding - 2 * offset_x
+    dash_length = 2
+    bar_width = 14
+    image = Image.new('RGB', (width, height), (255, 255, 255))
+    canvas = ImageDraw.Draw(image)
+    black = (0, 0, 0)
+    line_color = (100, 50, 255)
+    bar_color = (150, 100, 255)
+    bar_outline_color = (130, 80, 235)
+
+    top_left = (padding, padding)
+    origin = (padding, height - padding)
+    bottom_right = (width - padding, height - padding)
+    top_right = (width - padding, padding)
+    default_font = ImageFont.load_default()
+    canvas.line([top_left, origin, bottom_right, top_right], black, 1)
+    canvas.line([top_left, (padding + arrow_width, padding + arrow_length)], black, 1)
+    canvas.line([top_left, (padding - arrow_width, padding + arrow_length)], black, 1)
+    canvas.line([top_right, (width - padding + arrow_width, padding + arrow_length)], black, 1)
+    canvas.line([top_right, (width - padding - arrow_width, padding + arrow_length)], black, 1)
+    canvas.text((6, 1), text="Total users", font=default_font, fill=black, direction='ttb', anchor='mm')
+    canvas.text((width - 60, 1), text="Users/day", font=default_font, fill=black, direction='ttb', anchor='mm')
+    canvas.text((width / 2 - 20, 10), text="Million", font=default_font, fill=black, direction='ttb', anchor='mm')
+
+    dateval = datetime.datetime.now() - datetime.timedelta(days=6)
+    for x in range(padding + offset_x, width - padding - offset_x+1, round((width - 2*padding - 2*offset_x) / 6)):
+        canvas.line([(x, height - padding), (x, height - padding + dash_length)], black, 1)
+        canvas.text(
+            (x - 10, height-padding+dash_length),
+            text=dateval.strftime("%d/%m"),
+            font=default_font, fill=black,
+            direction='ttb',
+            anchor='mm'
+        )
+        dateval = dateval + datetime.timedelta(days=1)
+
+    val = max_graph_val
+    valstep = floor((max_graph_val - min_graph_val) / 4)
+    val_reg = max_graph_reg_val
+    valstep_reg = floor((max_graph_reg_val - min_graph_reg_val) / 4)
+    for y in range(padding + offset_y, height - padding - offset_y+1, round((height - 2*padding - 2*offset_y) / 4)):
+        canvas.text((1, y), text=str(val), font=default_font, fill=black, direction='ttb', anchor='mm')
+        canvas.text((width - padding + 2, y), text=str(val_reg), font=default_font, fill=black, direction='ttb', anchor='mm')
+        canvas.line([(padding, y), (padding - dash_length, y)], black, 1)
+        canvas.line([(width - padding, y), (width - padding + dash_length, y)], black, 1)
+        val -= valstep
+        val_reg -= valstep_reg
+
+    for i in range(0, 7):
+        cur_val = sums[13-i]['num']
+        cur_graph_val = \
+            round(height - padding - offset_y - (cur_val - min_graph_reg_val) / graph_range_reg_y * value_zone_y)
+        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
+        canvas.rectangle(
+            [(cur_x - bar_width / 2, height - padding - 1), (cur_x + bar_width / 2, cur_graph_val)],
+            fill=bar_color,
+            outline=bar_outline_color
+        )
+
+    dots = []
+    for i in range(0, 7):
+        cur_val = sums[6-i]['num']
+        cur_graph_val = round(height - padding - offset_y - (cur_val - min_graph_val)/graph_range_y * value_zone_y)
+        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
+        dots.append((cur_x, cur_graph_val))
+
+    canvas.line(dots, fill=line_color, width=1, joint='curve')
+    bio = BytesIO()
+    bio.name = 'image.png'
+    image.save(bio, 'PNG')
+    bio.seek(0)
+    bot.send_photo(chat_id=chat_id, photo=bio)
 
 
 def shortbot(event, context):
