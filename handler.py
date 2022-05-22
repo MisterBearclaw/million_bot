@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import sys
 from math import floor, log10
 import telegram
 import pymysql
@@ -17,8 +18,8 @@ from io import BytesIO
 # Logging is cool!
 logger = logging.getLogger()
 if logger.handlers:
-    for handler in logger.handlers:
-        logger.removeHandler(handler)
+    for log_handler in logger.handlers:
+        logger.removeHandler(log_handler)
 logging.basicConfig(level=logging.INFO)
 
 OK_RESPONSE = {
@@ -198,7 +199,7 @@ def chat_reaction0(bot, update):
             chat = cur.fetchone()
             if chat['createdUserCount'] > 1:
                 return 28
-        return 26
+        return 35
     else:
         return 0
 
@@ -491,6 +492,29 @@ def chat_reaction33(bot, update):
             author_chat = cur.fetchone()
             bot.sendMessage(chat_id=author_chat['id'], text="Получен ответ на Ваш вопрос")
     return 33
+
+
+def chat_reaction35(bot, update):
+    text = update.message.text
+    if text != "Согласен / Согласна":
+        return 0
+    return 36
+
+
+def chat_reaction36(bot, update):
+    text = update.message.text
+    if text == "Наши требования":
+        return 38
+    if text != "Согласен / Согласна":
+        return 0
+    return 37
+
+
+def chat_reaction37(bot, update):
+    text = update.message.text
+    if text != "Согласен / Согласна":
+        return 0
+    return 26
 
 
 def chat_output0(bot, chat_id, update):
@@ -862,6 +886,40 @@ def chat_output34(bot, chat_id, update):
     set_chat_state(chat_id, 11)
 
 
+def chat_output35(bot, chat_id, update):
+    reply = texts[35]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output36(bot, chat_id, update):
+    reply = texts[36]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")],
+          [telegram.KeyboardButton("Наши требования")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output37(bot, chat_id, update):
+    reply = texts[37]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output38(bot, chat_id, update):
+    reply = texts[38]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+    set_chat_state(chat_id, 36)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -1031,63 +1089,7 @@ def shortbot(event, context):
         chat_id = update.message.chat.id
         state = get_chat_state(chat_id)
         logger.info(f'Pre state is {state}')
-        processors = {
-            0: chat_reaction0,
-            1: chat_reaction1,
-            2: chat_reaction2,
-            4: chat_reaction4,
-            7: chat_reaction7,
-            8: chat_reaction8,
-            10: chat_reaction10,
-            11: chat_reaction11,
-            14: chat_reaction14,
-            18: chat_reaction18,
-            19: chat_reaction19,
-            20: chat_reaction20,
-            21: chat_reaction21,
-            23: chat_reaction23,
-            26: chat_reaction26,
-            29: chat_reaction29,
-            31: chat_reaction31,
-            32: chat_reaction32,
-            33: chat_reaction33
-        }
-        outputters = {
-            0: chat_output0,
-            1: chat_output1,
-            2: chat_output2,
-            3: chat_output3,
-            5: chat_output5,
-            6: chat_output6,
-            7: chat_output7,
-            8: chat_output8,
-            9: chat_output9,
-            10: chat_output10,
-            11: chat_output11,
-            12: chat_output12,
-            13: chat_output13,
-            14: chat_output14,
-            15: chat_output15,
-            16: chat_output16,
-            17: chat_output17,
-            18: chat_output18,
-            19: chat_output19,
-            20: chat_output20,
-            21: chat_output21,
-            22: chat_output22,
-            23: chat_output23,
-            24: chat_output24,
-            25: chat_output25,
-            26: chat_output26,
-            27: chat_output27,
-            28: chat_output28,
-            29: chat_output29,
-            30: chat_output30,
-            31: chat_output31,
-            32: chat_output32,
-            33: chat_output33,
-            34: chat_output34
-        }
+        processor = getattr(sys.modules[__name__], "chat_reaction" + str(state))
         if update.message.text == BROADCAST_CODE:
             set_chat_state(chat_id, 31)
             state = 31
@@ -1095,8 +1097,8 @@ def shortbot(event, context):
             set_chat_state(chat_id, 33)
             state = 33
         else:
-            if state in processors:
-                newState = processors[state](bot, update)
+            if processor is not None:
+                newState = processor(bot, update)
                 logger.info(f'New state is {newState}')
                 if newState != state:
                     set_chat_state(chat_id, newState)
@@ -1104,10 +1106,12 @@ def shortbot(event, context):
             else:
                 text = f'Чат в неожиданном состоянии {state}. MrBearclaw еще работает'
                 bot.sendMessage(chat_id=chat_id, text=text)
+                set_chat_state(chat_id, 0)
                 logger.info('Message sent')
 
-        if state in outputters:
-            outputters[state](bot, chat_id, update)
+        outputter = getattr(sys.modules[__name__], "chat_output" + str(state))
+        if outputter is not None:
+            outputter(bot, chat_id, update)
         else:
             text = f'Вывод для состояния {state} не определён. В релизе этого быть не должно. Пока что возвращаемся в' \
                    f' начало. '
