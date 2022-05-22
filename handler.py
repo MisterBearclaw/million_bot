@@ -214,6 +214,12 @@ def chat_reaction1(bot, update):
             return 13
         user = cur.fetchone()
         chat_id = update.message.chat.id
+    allow_free_login_till = user['passwordlessEntryAllowedTill']
+    if allow_free_login_till is not None:
+        if datetime.datetime.now() < allow_free_login_till:
+            set_chat_user(chat_id, user['id'])
+            update_user_last_login(user['id'])
+            return 40
     context = {'user': user['id'], 'hash': user['password']}
     set_chat_context(chat_id, json.dumps(context))
     return 14
@@ -343,6 +349,19 @@ def chat_reaction14(bot, update):
         update_user_last_login(context['user'])
         return 11
     return 15
+
+
+def chat_reaction16(bot, update):
+    text = update.message.text
+    if text != "Разрешить приглашённым вход без пароля":
+        return 11
+    user = get_current_user(update.message.chat.id)
+    with DATABASE.cursor() as cur:
+        allow_till = datetime.datetime.now() + datetime.timedelta(minutes=6)
+        cur.execute(f'UPDATE users SET passwordlessEntryAllowedTill=\'{allow_till.strftime("%Y-%m-%d %H:%M:%S")}\' '
+                    f'WHERE parentUserId={user["id"]}')
+        DATABASE.commit()
+    return 39
 
 
 def chat_reaction18(bot, update):
@@ -613,40 +632,40 @@ def chat_output15(bot, chat_id, update):
 
 
 def chat_output16(bot, chat_id, update):
-    reply = 'Данные о моих приглашениях:'
+    reply = 'Мои неиспользованные приглашения:\n'
     with DATABASE.cursor() as cur:
         cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount from '
                     f'invites inner join chats on invites.createdBy  = chats.affiliatedUser left join users on '
                     f'invites.usedBy = users.id where chats.id={chat_id}')
         invite_objects = cur.fetchall()
     total_unused = 0
+    total_used = 0
     for invite in invite_objects:
         user = invite['login']
-        used = False
         use_hint = ''
         if user is None:
-            user = "Не использовано"
             use_by_date = invite['createdOn']
             use_by_date = use_by_date + datetime.timedelta(days=3)
             use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
-        else:
-            user = 'Пользователь ' + user
-            used = True
             total_unused += 1
-        message = f'---------\n' \
-                  f'Код приглашения: {invite["invite"]}\n' \
-                  f'Создано: {invite["createdOn"].strftime("%Y-%m-%d")}\n' \
-                  f'{user}'
-        if not used:
-            message += f'\n{use_hint}'
+            reply += f'Код приглашения: {invite["invite"]}\n'
+        else:
+            total_used += 1
 
-        bot.sendMessage(chat_id=chat_id, text=message)
     if total_unused == 0:
         reply = texts['thanks_for_inviting']
     else:
+        reply += use_hint
+        bot.sendMessage(chat_id=chat_id, text=reply)
         reply = texts['dont_forget_to_invite']
-    send_message_with_logged_in_keyboard(bot, chat_id, reply)
-    set_chat_state(chat_id, 11)
+    if total_used == 0:
+        send_message_with_logged_in_keyboard(bot, chat_id, reply)
+        set_chat_state(chat_id, 11)
+    else:
+        kb = [[telegram.KeyboardButton("Назад")],
+              [telegram.KeyboardButton("Разрешить приглашённым вход без пароля")]]
+        kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
 
 def chat_output17(bot, chat_id, update):
@@ -920,6 +939,18 @@ def chat_output38(bot, chat_id, update):
     set_chat_state(chat_id, 36)
 
 
+def chat_output39(bot, chat_id, update):
+    reply = texts[39]
+    send_message_with_logged_in_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 11)
+
+
+def chat_output40(bot, chat_id, update):
+    reply = texts[40]
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    set_chat_state(chat_id, 20)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -974,17 +1005,17 @@ def send_current_state_image(bot, chat_id):
     min_val = sums[6]['num']
     min_reg_val = max_reg_val = sums[7]['num']
     for i in range(8, 14):
-        if min_reg_val>sums[i]['num']:
+        if min_reg_val > sums[i]['num']:
             min_reg_val = sums[i]['num']
         if max_reg_val < sums[i]['num']:
             max_reg_val = sums[i]['num']
     order_of_magnitude = floor(log10(max_val))
     order_of_reg_magnitude = floor(log10(max_reg_val))
-    max_graph_val = ((max_val // (10**order_of_magnitude)) + 1) * 10**order_of_magnitude
+    max_graph_val = ((max_val // (10 ** order_of_magnitude)) + 1) * 10 ** order_of_magnitude
     max_graph_reg_val = ((max_reg_val // (10 ** order_of_reg_magnitude)) + 1) * 10 ** order_of_reg_magnitude
     min_graph_val = max_graph_val
     while min_graph_val > min_val:
-        min_graph_val -= 10**order_of_magnitude
+        min_graph_val -= 10 ** order_of_magnitude
     graph_range_y = max_graph_val - min_graph_val
     min_graph_reg_val = max_graph_reg_val
     while min_graph_reg_val > min_reg_val:
@@ -998,7 +1029,7 @@ def send_current_state_image(bot, chat_id):
     padding = 20
     offset_x = 10
     offset_y = 10
-    value_zone_y = height - 2*padding - 2*offset_y
+    value_zone_y = height - 2 * padding - 2 * offset_y
     value_zone_x = width - 2 * padding - 2 * offset_x
     dash_length = 2
     bar_width = 14
@@ -1024,10 +1055,10 @@ def send_current_state_image(bot, chat_id):
     canvas.text((width / 2 - 20, 10), text="Million", font=default_font, fill=black, direction='ttb', anchor='mm')
 
     dateval = datetime.datetime.now() - datetime.timedelta(days=6)
-    for x in range(padding + offset_x, width - padding - offset_x+1, round((width - 2*padding - 2*offset_x) / 6)):
+    for x in range(padding + offset_x, width - padding - offset_x + 1, round((width - 2 * padding - 2 * offset_x) / 6)):
         canvas.line([(x, height - padding), (x, height - padding + dash_length)], black, 1)
         canvas.text(
-            (x - 10, height-padding+dash_length),
+            (x - 10, height - padding + dash_length),
             text=dateval.strftime("%d/%m"),
             font=default_font, fill=black,
             direction='ttb',
@@ -1039,16 +1070,18 @@ def send_current_state_image(bot, chat_id):
     valstep = floor((max_graph_val - min_graph_val) / 4)
     val_reg = max_graph_reg_val
     valstep_reg = floor((max_graph_reg_val - min_graph_reg_val) / 4)
-    for y in range(padding + offset_y, height - padding - offset_y+1, round((height - 2*padding - 2*offset_y) / 4)):
+    for y in range(padding + offset_y, height - padding - offset_y + 1,
+                   round((height - 2 * padding - 2 * offset_y) / 4)):
         canvas.text((1, y), text=str(val), font=default_font, fill=black, direction='ttb', anchor='mm')
-        canvas.text((width - padding + 2, y), text=str(val_reg), font=default_font, fill=black, direction='ttb', anchor='mm')
+        canvas.text((width - padding + 2, y), text=str(val_reg), font=default_font, fill=black, direction='ttb',
+                    anchor='mm')
         canvas.line([(padding, y), (padding - dash_length, y)], black, 1)
         canvas.line([(width - padding, y), (width - padding + dash_length, y)], black, 1)
         val -= valstep
         val_reg -= valstep_reg
 
     for i in range(0, 7):
-        cur_val = sums[13-i]['num']
+        cur_val = sums[13 - i]['num']
         cur_graph_val = \
             round(height - padding - offset_y - (cur_val - min_graph_reg_val) / graph_range_reg_y * value_zone_y)
         cur_x = round(padding + offset_x + value_zone_x / 6 * i)
@@ -1060,8 +1093,8 @@ def send_current_state_image(bot, chat_id):
 
     dots = []
     for i in range(0, 7):
-        cur_val = sums[6-i]['num']
-        cur_graph_val = round(height - padding - offset_y - (cur_val - min_graph_val)/graph_range_y * value_zone_y)
+        cur_val = sums[6 - i]['num']
+        cur_graph_val = round(height - padding - offset_y - (cur_val - min_graph_val) / graph_range_y * value_zone_y)
         cur_x = round(padding + offset_x + value_zone_x / 6 * i)
         dots.append((cur_x, cur_graph_val))
 
