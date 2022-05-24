@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+import sys
+from math import floor, log10
 import telegram
 import pymysql
 import numbers
@@ -10,12 +12,14 @@ import random
 from datetime import datetime
 import datetime
 from texts import texts
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 # Logging is cool!
 logger = logging.getLogger()
 if logger.handlers:
-    for handler in logger.handlers:
-        logger.removeHandler(handler)
+    for log_handler in logger.handlers:
+        logger.removeHandler(log_handler)
 logging.basicConfig(level=logging.INFO)
 
 OK_RESPONSE = {
@@ -195,7 +199,7 @@ def chat_reaction0(bot, update):
             chat = cur.fetchone()
             if chat['createdUserCount'] > 1:
                 return 28
-        return 26
+        return 35
     else:
         return 0
 
@@ -210,6 +214,12 @@ def chat_reaction1(bot, update):
             return 13
         user = cur.fetchone()
         chat_id = update.message.chat.id
+    allow_free_login_till = user['passwordlessEntryAllowedTill']
+    if allow_free_login_till is not None:
+        if datetime.datetime.now() < allow_free_login_till:
+            set_chat_user(chat_id, user['id'])
+            update_user_last_login(user['id'])
+            return 40
     context = {'user': user['id'], 'hash': user['password']}
     set_chat_context(chat_id, json.dumps(context))
     return 14
@@ -284,7 +294,7 @@ def chat_reaction10(bot, update):
         if isinstance(inviting_user_id, numbers.Number):
             parent = inviting_user_id
         cur.execute(
-            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount) VALUES("{login}", "{password_hash}", now(), {parent}, 0)')
+            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount, createdOn) VALUES("{login}", "{password_hash}", now(), {parent}, 0, CURDATE())')
         DATABASE.commit()
         new_user_id = cur.lastrowid
     with DATABASE.cursor() as cur:
@@ -339,6 +349,19 @@ def chat_reaction14(bot, update):
         update_user_last_login(context['user'])
         return 11
     return 15
+
+
+def chat_reaction16(bot, update):
+    text = update.message.text
+    if text != "Разрешить приглашённым вход без пароля":
+        return 11
+    user = get_current_user(update.message.chat.id)
+    with DATABASE.cursor() as cur:
+        allow_till = datetime.datetime.now() + datetime.timedelta(minutes=6)
+        cur.execute(f'UPDATE users SET passwordlessEntryAllowedTill=\'{allow_till.strftime("%Y-%m-%d %H:%M:%S")}\' '
+                    f'WHERE parentUserId={user["id"]}')
+        DATABASE.commit()
+    return 39
 
 
 def chat_reaction18(bot, update):
@@ -490,6 +513,29 @@ def chat_reaction33(bot, update):
     return 33
 
 
+def chat_reaction35(bot, update):
+    text = update.message.text
+    if text != "Согласен / Согласна":
+        return 0
+    return 36
+
+
+def chat_reaction36(bot, update):
+    text = update.message.text
+    if text == "Наши требования":
+        return 38
+    if text != "Согласен / Согласна":
+        return 0
+    return 37
+
+
+def chat_reaction37(bot, update):
+    text = update.message.text
+    if text != "Согласен / Согласна":
+        return 0
+    return 26
+
+
 def chat_output0(bot, chat_id, update):
     reply = texts[0]
     send_message_with_intro_keyboard(bot, chat_id, reply)
@@ -586,40 +632,40 @@ def chat_output15(bot, chat_id, update):
 
 
 def chat_output16(bot, chat_id, update):
-    reply = 'Данные о моих приглашениях:'
+    reply = 'Мои неиспользованные приглашения:\n'
     with DATABASE.cursor() as cur:
         cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount from '
                     f'invites inner join chats on invites.createdBy  = chats.affiliatedUser left join users on '
                     f'invites.usedBy = users.id where chats.id={chat_id}')
         invite_objects = cur.fetchall()
     total_unused = 0
+    total_used = 0
     for invite in invite_objects:
         user = invite['login']
-        used = False
         use_hint = ''
         if user is None:
-            user = "Не использовано"
             use_by_date = invite['createdOn']
             use_by_date = use_by_date + datetime.timedelta(days=3)
             use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
-        else:
-            user = 'Пользователь ' + user
-            used = True
             total_unused += 1
-        message = f'---------\n' \
-                  f'Код приглашения: {invite["invite"]}\n' \
-                  f'Создано: {invite["createdOn"].strftime("%Y-%m-%d")}\n' \
-                  f'{user}'
-        if not used:
-            message += f'\n{use_hint}'
+            reply += f'Код приглашения: {invite["invite"]}\n'
+        else:
+            total_used += 1
 
-        bot.sendMessage(chat_id=chat_id, text=message)
     if total_unused == 0:
         reply = texts['thanks_for_inviting']
     else:
+        reply += use_hint
+        bot.sendMessage(chat_id=chat_id, text=reply)
         reply = texts['dont_forget_to_invite']
-    send_message_with_logged_in_keyboard(bot, chat_id, reply)
-    set_chat_state(chat_id, 11)
+    if total_used == 0:
+        send_message_with_logged_in_keyboard(bot, chat_id, reply)
+        set_chat_state(chat_id, 11)
+    else:
+        kb = [[telegram.KeyboardButton("Назад")],
+              [telegram.KeyboardButton("Разрешить приглашённым вход без пароля")]]
+        kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
 
 def chat_output17(bot, chat_id, update):
@@ -859,6 +905,52 @@ def chat_output34(bot, chat_id, update):
     set_chat_state(chat_id, 11)
 
 
+def chat_output35(bot, chat_id, update):
+    reply = texts[35]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output36(bot, chat_id, update):
+    reply = texts[36]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")],
+          [telegram.KeyboardButton("Наши требования")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output37(bot, chat_id, update):
+    reply = texts[37]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
+def chat_output38(bot, chat_id, update):
+    reply = texts[38]
+    kb = [[telegram.KeyboardButton("Согласен / Согласна")],
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+    set_chat_state(chat_id, 36)
+
+
+def chat_output39(bot, chat_id, update):
+    reply = texts[39]
+    send_message_with_logged_in_keyboard(bot, chat_id, reply)
+    set_chat_state(chat_id, 11)
+
+
+def chat_output40(bot, chat_id, update):
+    reply = texts[40]
+    bot.sendMessage(chat_id=chat_id, text=reply)
+    set_chat_state(chat_id, 20)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -894,7 +986,124 @@ def escape_tg(in_string):
 
 
 def send_current_state_image(bot, chat_id):
-    bot.send_photo(chat_id=chat_id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT num FROM(    select count(*) as num from users u where u.createdOn <= CURDATE() - 0    '
+                    f'UNION ALL select count(*) as c from users u where u.createdOn <= CURDATE() - 1    UNION ALL '
+                    f'select count(*) as c from users u where u.createdOn <= CURDATE() - 2    UNION ALL select count('
+                    f'*) as c from users u where u.createdOn <= CURDATE() - 3    UNION All select count(*) as c from '
+                    f'users u where u.createdOn <= CURDATE() - 4   UNION All select count(*) as c from users u where '
+                    f'u.createdOn <= CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn '
+                    f'<= CURDATE() - 6 UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() '
+                    f'UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() - 1    UNION ALL '
+                    f'select count(*) as c from users u where u.createdOn = CURDATE() - 2    UNION ALL select count('
+                    f'*) as c from users u where u.createdOn = CURDATE() - 3    UNION All select count(*) as c from '
+                    f'users u where u.createdOn = CURDATE() - 4    UNION All select count(*) as c from users u where '
+                    f'u.createdOn = CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn = '
+                    f'CURDATE() - 6) as sums')  # if you are trying to read it, well... oops:)
+        sums = cur.fetchall()
+    max_val = sums[0]['num']
+    min_val = sums[6]['num']
+    min_reg_val = max_reg_val = sums[7]['num']
+    for i in range(8, 14):
+        if min_reg_val > sums[i]['num']:
+            min_reg_val = sums[i]['num']
+        if max_reg_val < sums[i]['num']:
+            max_reg_val = sums[i]['num']
+    order_of_magnitude = floor(log10(max_val))
+    order_of_reg_magnitude = floor(log10(max_reg_val))
+    max_graph_val = ((max_val // (10 ** order_of_magnitude)) + 1) * 10 ** order_of_magnitude
+    max_graph_reg_val = ((max_reg_val // (10 ** order_of_reg_magnitude)) + 1) * 10 ** order_of_reg_magnitude
+    min_graph_val = max_graph_val
+    while min_graph_val > min_val:
+        min_graph_val -= 10 ** order_of_magnitude
+    graph_range_y = max_graph_val - min_graph_val
+    min_graph_reg_val = max_graph_reg_val
+    while min_graph_reg_val > min_reg_val:
+        min_graph_reg_val -= 10 ** order_of_reg_magnitude
+    graph_range_reg_y = max_graph_reg_val - min_graph_reg_val
+
+    width = 300
+    height = 300
+    arrow_length = 3
+    arrow_width = 2
+    padding = 20
+    offset_x = 10
+    offset_y = 10
+    value_zone_y = height - 2 * padding - 2 * offset_y
+    value_zone_x = width - 2 * padding - 2 * offset_x
+    dash_length = 2
+    bar_width = 14
+    image = Image.new('RGB', (width, height), (255, 255, 255))
+    canvas = ImageDraw.Draw(image)
+    black = (0, 0, 0)
+    line_color = (100, 50, 255)
+    bar_color = (150, 100, 255)
+    bar_outline_color = (130, 80, 235)
+
+    top_left = (padding, padding)
+    origin = (padding, height - padding)
+    bottom_right = (width - padding, height - padding)
+    top_right = (width - padding, padding)
+    default_font = ImageFont.load_default()
+    canvas.line([top_left, origin, bottom_right, top_right], black, 1)
+    canvas.line([top_left, (padding + arrow_width, padding + arrow_length)], black, 1)
+    canvas.line([top_left, (padding - arrow_width, padding + arrow_length)], black, 1)
+    canvas.line([top_right, (width - padding + arrow_width, padding + arrow_length)], black, 1)
+    canvas.line([top_right, (width - padding - arrow_width, padding + arrow_length)], black, 1)
+    canvas.text((6, 1), text="Total users", font=default_font, fill=black, direction='ttb', anchor='mm')
+    canvas.text((width - 60, 1), text="Users/day", font=default_font, fill=black, direction='ttb', anchor='mm')
+    canvas.text((width / 2 - 20, 10), text="Million", font=default_font, fill=black, direction='ttb', anchor='mm')
+
+    dateval = datetime.datetime.now() - datetime.timedelta(days=6)
+    for x in range(padding + offset_x, width - padding - offset_x + 1, round((width - 2 * padding - 2 * offset_x) / 6)):
+        canvas.line([(x, height - padding), (x, height - padding + dash_length)], black, 1)
+        canvas.text(
+            (x - 10, height - padding + dash_length),
+            text=dateval.strftime("%d/%m"),
+            font=default_font, fill=black,
+            direction='ttb',
+            anchor='mm'
+        )
+        dateval = dateval + datetime.timedelta(days=1)
+
+    val = max_graph_val
+    valstep = floor((max_graph_val - min_graph_val) / 4)
+    val_reg = max_graph_reg_val
+    valstep_reg = floor((max_graph_reg_val - min_graph_reg_val) / 4)
+    for y in range(padding + offset_y, height - padding - offset_y + 1,
+                   round((height - 2 * padding - 2 * offset_y) / 4)):
+        canvas.text((1, y), text=str(val), font=default_font, fill=black, direction='ttb', anchor='mm')
+        canvas.text((width - padding + 2, y), text=str(val_reg), font=default_font, fill=black, direction='ttb',
+                    anchor='mm')
+        canvas.line([(padding, y), (padding - dash_length, y)], black, 1)
+        canvas.line([(width - padding, y), (width - padding + dash_length, y)], black, 1)
+        val -= valstep
+        val_reg -= valstep_reg
+
+    for i in range(0, 7):
+        cur_val = sums[13 - i]['num']
+        cur_graph_val = \
+            round(height - padding - offset_y - (cur_val - min_graph_reg_val) / graph_range_reg_y * value_zone_y)
+        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
+        canvas.rectangle(
+            [(cur_x - bar_width / 2, height - padding - 1), (cur_x + bar_width / 2, cur_graph_val)],
+            fill=bar_color,
+            outline=bar_outline_color
+        )
+
+    dots = []
+    for i in range(0, 7):
+        cur_val = sums[6 - i]['num']
+        cur_graph_val = round(height - padding - offset_y - (cur_val - min_graph_val) / graph_range_y * value_zone_y)
+        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
+        dots.append((cur_x, cur_graph_val))
+
+    canvas.line(dots, fill=line_color, width=1, joint='curve')
+    bio = BytesIO()
+    bio.name = 'image.png'
+    image.save(bio, 'PNG')
+    bio.seek(0)
+    bot.send_photo(chat_id=chat_id, photo=bio)
 
 
 def shortbot(event, context):
@@ -913,63 +1122,7 @@ def shortbot(event, context):
         chat_id = update.message.chat.id
         state = get_chat_state(chat_id)
         logger.info(f'Pre state is {state}')
-        processors = {
-            0: chat_reaction0,
-            1: chat_reaction1,
-            2: chat_reaction2,
-            4: chat_reaction4,
-            7: chat_reaction7,
-            8: chat_reaction8,
-            10: chat_reaction10,
-            11: chat_reaction11,
-            14: chat_reaction14,
-            18: chat_reaction18,
-            19: chat_reaction19,
-            20: chat_reaction20,
-            21: chat_reaction21,
-            23: chat_reaction23,
-            26: chat_reaction26,
-            29: chat_reaction29,
-            31: chat_reaction31,
-            32: chat_reaction32,
-            33: chat_reaction33
-        }
-        outputters = {
-            0: chat_output0,
-            1: chat_output1,
-            2: chat_output2,
-            3: chat_output3,
-            5: chat_output5,
-            6: chat_output6,
-            7: chat_output7,
-            8: chat_output8,
-            9: chat_output9,
-            10: chat_output10,
-            11: chat_output11,
-            12: chat_output12,
-            13: chat_output13,
-            14: chat_output14,
-            15: chat_output15,
-            16: chat_output16,
-            17: chat_output17,
-            18: chat_output18,
-            19: chat_output19,
-            20: chat_output20,
-            21: chat_output21,
-            22: chat_output22,
-            23: chat_output23,
-            24: chat_output24,
-            25: chat_output25,
-            26: chat_output26,
-            27: chat_output27,
-            28: chat_output28,
-            29: chat_output29,
-            30: chat_output30,
-            31: chat_output31,
-            32: chat_output32,
-            33: chat_output33,
-            34: chat_output34
-        }
+        processor = getattr(sys.modules[__name__], "chat_reaction" + str(state))
         if update.message.text == BROADCAST_CODE:
             set_chat_state(chat_id, 31)
             state = 31
@@ -977,8 +1130,8 @@ def shortbot(event, context):
             set_chat_state(chat_id, 33)
             state = 33
         else:
-            if state in processors:
-                newState = processors[state](bot, update)
+            if processor is not None:
+                newState = processor(bot, update)
                 logger.info(f'New state is {newState}')
                 if newState != state:
                     set_chat_state(chat_id, newState)
@@ -986,10 +1139,12 @@ def shortbot(event, context):
             else:
                 text = f'Чат в неожиданном состоянии {state}. MrBearclaw еще работает'
                 bot.sendMessage(chat_id=chat_id, text=text)
+                set_chat_state(chat_id, 0)
                 logger.info('Message sent')
 
-        if state in outputters:
-            outputters[state](bot, chat_id, update)
+        outputter = getattr(sys.modules[__name__], "chat_output" + str(state))
+        if outputter is not None:
+            outputter(bot, chat_id, update)
         else:
             text = f'Вывод для состояния {state} не определён. В релизе этого быть не должно. Пока что возвращаемся в' \
                    f' начало. '
