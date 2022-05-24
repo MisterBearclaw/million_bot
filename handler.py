@@ -864,7 +864,7 @@ def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
           [telegram.KeyboardButton("Общая картина")],
           [telegram.KeyboardButton("Мой город")],
           [telegram.KeyboardButton("Сменить пароль")],
-          [telegram.KeyboardButton("Подробности")],
+          [telegram.KeyboardButton("Подробности")], 
           [telegram.KeyboardButton("Выход")],
           [telegram.KeyboardButton("Обратная связь")],
           [telegram.KeyboardButton("Удалить аккаунт")]]
