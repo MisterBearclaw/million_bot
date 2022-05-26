@@ -836,7 +836,6 @@ def chat_output31(bot, chat_id, update):
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
-this will create a bug
 
 def chat_output32(bot, chat_id, update):
     reply = f'*_Обратная связь_*\n\n'
