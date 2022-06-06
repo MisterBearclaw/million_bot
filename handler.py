@@ -242,6 +242,28 @@ def chat_reaction2(bot, update):
             return 5
 
 
+def chat_reaction3(bot, update):
+    text = update.message.text
+    if text == texts['btn_about_1']:
+        return 3
+    if text == texts['btn_about_2']:
+        return 41
+    if text == texts['btn_about_3']:
+        return 42
+    if text == texts['btn_about_4']:
+        return 43
+    chat_id = update.message.chat.id
+    context = get_chat_context(chat_id)
+    if context['return'] is None:
+        return 0
+    else:
+        state = context['return']
+    if state == 0:
+        return 0
+    else:
+        return 11
+
+
 def chat_reaction4(bot, update):
     reply = texts['safety_logout']
     chat_id = update.message.chat.id
@@ -553,18 +575,7 @@ def chat_output2(bot, chat_id, update):
 
 def chat_output3(bot, chat_id, update):
     reply = texts[3]
-
-    context = get_chat_context(chat_id)
-    if context['return'] is None:
-        state = 0
-    else:
-        state = context['return']
-    if state == 0:
-        send_message_with_intro_keyboard(bot, chat_id, reply)
-    else:
-        send_message_with_logged_in_keyboard(bot, chat_id, reply)
-    set_chat_state(chat_id, state)
-    logger.info('Message sent')
+    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
 
 
 def chat_output5(bot, chat_id, update):
@@ -683,7 +694,7 @@ def chat_output17(bot, chat_id, update):
             in_town = cur.fetchone()['inTown']
         with DATABASE.cursor() as cur:
             town = user['town']
-            cur.execute(f'SELECT * from towns id = {town};')
+            cur.execute(f'SELECT * from towns WHERE id = {town};')
             town = cur.fetchone()
     percentage = total / 10000.0
     reply = f'Сейчас в системе зарегистрировано {total}. Это {percentage:.2f}% от нашей цели. '
@@ -958,6 +969,24 @@ def chat_output40(bot, chat_id, update):
     set_chat_state(chat_id, 20)
 
 
+def chat_output41(bot, chat_id, update):
+    reply = texts[41]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output42(bot, chat_id, update):
+    reply = texts[42]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output43(bot, chat_id, update):
+    reply = texts[43]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    set_chat_state(chat_id, 3)
+
+
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
@@ -985,11 +1014,29 @@ def send_message_with_intro_keyboard(bot, chat_id, reply, parse_mode=None):
         bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
 
+def send_message_with_about_keyboard(bot, chat_id, reply, parse_mode=None):
+    kb = [[telegram.KeyboardButton(texts['btn_about_1'])],
+          [telegram.KeyboardButton(texts['btn_about_2'])],
+          [telegram.KeyboardButton(texts['btn_about_3'])],
+          [telegram.KeyboardButton(texts['btn_about_4'])],
+          [telegram.KeyboardButton(texts['btn_back'])]]
+    kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
+    if parse_mode is not None:
+        reply = escape_tg_punctuation(reply)
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode=parse_mode)
+    else:
+        bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
+
+
 def escape_tg(in_string):
     return in_string.replace('\\', '\\\\').replace('.', '\\.').replace('_', '\\_').replace('*', '\\*').replace(
         '[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace(
         '`', '\\´').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace(
         '=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('!', '\\!')
+
+
+def escape_tg_punctuation(in_string):
+    return in_string.replace('.', '\\.').replace('(', '\\(').replace(')', '\\)').replace('=', '\\=').replace('!', '\\!')
 
 
 def send_current_state_image(bot, chat_id):
@@ -1016,6 +1063,8 @@ def send_current_state_image(bot, chat_id):
             min_reg_val = sums[i]['num']
         if max_reg_val < sums[i]['num']:
             max_reg_val = sums[i]['num']
+    if max_reg_val == 0 or max_val == 0:
+        return
     order_of_magnitude = floor(log10(max_val))
     order_of_reg_magnitude = floor(log10(max_reg_val))
     max_graph_val = ((max_val // (10 ** order_of_magnitude)) + 1) * 10 ** order_of_magnitude
