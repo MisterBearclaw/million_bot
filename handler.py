@@ -681,11 +681,18 @@ def chat_output17(bot, chat_id, update):
             town = user['town']
             cur.execute(f'SELECT count(*) as inTown from users where town = {town};')
             in_town = cur.fetchone()['inTown']
+        with DATABASE.cursor() as cur:
+            town = user['town']
+            cur.execute(f'SELECT * from towns id = {town};')
+            town = cur.fetchone()
     percentage = total / 10000.0
     reply = f'Сейчас в системе зарегистрировано {total}. Это {percentage:.2f}% от нашей цели. '
     reply += f'Из них {user["kidCount"]} привели вы и те, кого вы пригласили.'
     if in_town is not None:
         reply += f'\n Из них {in_town} в вашем городе.'
+        if town is not None and town['population'] is not None:
+            town_percentage = 100 * in_town / town['population']
+            reply += f' Это {town_percentage:.2f}% от населения Вашего города.'
     if total < 1000000:
         next_friday = datetime.date.today()
         next_friday += datetime.timedelta(1)
