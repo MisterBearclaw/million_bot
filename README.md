@@ -74,17 +74,17 @@
 
 Всем, желающим подробно разобраться в этой теме, советуем вступить в [телеграм-канал](https://t.me/stronger_than_violence), посвященный истории и механизмам мирного гражданского сопротивления:
 
-Ссылки:
+<sub>**Ссылки:**
 
-[1] Erica Chenoweth & Christopher Wiley Shay (2020). [**List of Campaigns in NAVCO 1.3**](https://doi.org/10.7910/DVN/ON9XND), Harvard Dataverse
+<sub>[1] Erica Chenoweth & Christopher Wiley Shay (2020). [**List of Campaigns in NAVCO 1.3**](https://doi.org/10.7910/DVN/ON9XND), Harvard Dataverse
 
-[2] Sarah Repucci & Amy Slipowitz (2022). [**The Global Expansion  of Authoritarian Rule**](https://freedomhouse.org/report/freedom-world/2022/global-expansion-authoritarian-rule). Freedom in the World report
+<sub>[2] Sarah Repucci & Amy Slipowitz (2022). [**The Global Expansion  of Authoritarian Rule**](https://freedomhouse.org/report/freedom-world/2022/global-expansion-authoritarian-rule). Freedom in the World report
 
-[3] Erica Chenoweth (2020). [**The Future of Nonviolent Resistance**](https://www.journalofdemocracy.org/articles/the-future-of-nonviolent-resistance-2/). Journal of Democracy, vol. 31, no. 3, July 2020, pp. 69-84. 
+<sub>[3] Erica Chenoweth (2020). [**The Future of Nonviolent Resistance**](https://www.journalofdemocracy.org/articles/the-future-of-nonviolent-resistance-2/). Journal of Democracy, vol. 31, no. 3, July 2020, pp. 69-84. 
 
-[4] Erica Chenoweth & Maria Stephan (2011). **Why civil resistance works: The strategic logic of nonviolent conflict**.
+<sub>[4] Erica Chenoweth & Maria Stephan (2011). **Why civil resistance works: The strategic logic of nonviolent conflict**.
 
-[5] Adrian Karatnycky & Peter Ackerman (2005). [**How Freedom Is Won: From Civic Resistance to Durable Democracy**](https://www.nonviolent-conflict.org/resource/freedom-won-civic-resistance-durable-democracy/). Freedom house study.
+<sub>[5] Adrian Karatnycky & Peter Ackerman (2005). [**How Freedom Is Won: From Civic Resistance to Durable Democracy**](https://www.nonviolent-conflict.org/resource/freedom-won-civic-resistance-durable-democracy/). Freedom house study.
 
 ## Наши требования
 1. Немедленная остановка боевых действий в Украине. Вывод всех войск с украинской территории, определенной на момент 20.02.2022, т.е. до признания Россией суверенитета ЛНР и ДНР. Нет войне!
@@ -99,4 +99,4 @@
 6. Признание результатов выборов в Государственную Думу VIII созыва недействительными. Организация новых выборов депутатов с полным соблюдением Конституции.
 
 ## Да столько народу никогда не наберется!
-Да, может, и не наберется. Миллион-Бот не является инструментом агитации. Мы, конечно, надеемся, что наше общество уже в обозримом будущем захочет жить свободно и счастливо, но если для достижения критической численности потребуются долгие годы, значит так тому и быть. 
+Да, может, и не наберется. Миллион-Бот не является инструментом агитации. Мы, конечно, надеемся, что наше общество уже в обозримом будущем захочет жить свободно и счастливо, но если для достижения [критической численности](#в-каком-случае-будет-объявлена-акция) потребуются долгие годы, значит так тому и быть. 
