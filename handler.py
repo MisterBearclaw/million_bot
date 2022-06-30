@@ -877,9 +877,9 @@ def chat_output32(bot, chat_id, update):
     if can_send:
         reply += '\n\nВы можете послать нам одно сообщение\\. Вы не сможете послать других, пока мы не ответим\\. ' \
                  'Извините, это ограничение нужно, чтобы мы могли справиться с потоком вопросов\\.\n' \
-                 'Отредактировать сообщение будет, к сожалению, нельзя. Максимальный размер сообщения -- 1000 символов\\.
+                 'Отредактировать сообщение будет, к сожалению, нельзя\\. Максимальный размер сообщения -- 1000 символов\\.'
     else:
-        reply += '\n\n К сожалению, вы сейчас не можете послать нам новое сообщение. Пожалуйста, подождите, пока мы ответим на ваше предыдущее. \\.'
+        reply += '\n\n К сожалению, вы сейчас не можете послать нам новое сообщение\\. Пожалуйста, подождите, пока мы ответим на ваше предыдущее\\.'
 
     if can_send:
         kb = [[telegram.KeyboardButton("Назад")]]
@@ -901,7 +901,7 @@ def chat_output33(bot, chat_id, update):
             return
         ticket = cur.fetchone()
     context = {'ticket': ticket['id']}
-    set_chat_context(chat_id, json.dumps(context));
+    set_chat_context(chat_id, json.dumps(context))
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users WHERE id={ticket["user_id"]}')
         if cur.rowcount == 0:
