@@ -174,6 +174,13 @@ def get_town_name(town_key):
     return town['town']
 
 
+def get_unused_invite_count(user_id):
+    with DATABASE.cursor() as cur:
+        cur.execute(f'select count(*) num from invites i where i.usedBy is null and i.createdBy = {user_id};')
+        town = cur.fetchone()
+    return town['num']
+
+
 def try_to_delete_message(bot, chat_id, update):
     try:
         bot.delete_message(chat_id, update.message.message_id)
@@ -674,7 +681,7 @@ def chat_output16(bot, chat_id, update):
     with DATABASE.cursor() as cur:
         cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount, '
                     f'count(i2.id) as usedInvites from invites inner join chats '
-                    f'on invites.createdBy = chats.affiliatedUser left join users on ' 
+                    f'on invites.createdBy = chats.affiliatedUser left join users on '
                     f'invites.usedBy = users.id left join invites i2'
                     f' on i2.createdBy = users.id and i2.usedBy is not null '
                     f'where chats.id={chat_id} '
@@ -719,11 +726,12 @@ def chat_output16(bot, chat_id, update):
 
 
 def chat_output17(bot, chat_id, update):
-    send_current_state_image(bot, chat_id)
+    # send_current_state_image(bot, chat_id)
     with DATABASE.cursor() as cur:
         cur.execute("SELECT count(*) AS numUsers FROM users")
         count = cur.fetchone()
     total = count['numUsers']
+    target = 140000000 * 0.04
     user = get_current_user(chat_id)
     in_town = None
     if user['town'] is not None:
@@ -735,22 +743,26 @@ def chat_output17(bot, chat_id, update):
             town = user['town']
             cur.execute(f'SELECT * from towns WHERE id = {town};')
             town = cur.fetchone()
-    percentage = total / 10000.0
-    reply = f'Сейчас в системе зарегистрировано {total}. Это {percentage:.2f}% от нашей цели. '
-    reply += f'Из них {user["kidCount"]} привели вы и те, кого вы пригласили.'
+    percentage = total / (0.01 * target)
+    reply = f'Сейчас в системе зарегистрировано {total} пользователей. Это {percentage:.2f}% от {target:.0f}.\n'
+    reply += f'Из этих людей {user["kidCount"]} привели вы и те, кого вы пригласили.\n'
     if in_town is not None:
-        reply += f'\n Из них {in_town} в вашем городе.'
+        reply += f'В вашем городе зарегистрировано {in_town}'
         if town is not None and town['population'] is not None:
-            town_percentage = 100 * in_town / town['population']
-            reply += f' Это {town_percentage:.2f}% от населения Вашего города.'
-    if total < 1000000:
+            town_target = town['population'] * 0.04
+            town_percentage = in_town / (0.01 * town_target)
+            reply += f' Это {town_percentage:.2f}% от {town_target:.0f}.'
+    if total < target:
         next_friday = datetime.date.today()
         next_friday += datetime.timedelta(1)
         while next_friday.weekday() != 4:
             next_friday += datetime.timedelta(1)
-        reply += f'\nДля нас этого количества пока что не достаточно! Если вы еще не использовали свои приглашения,' \
-                 f' пожалуйста пригласите друзей. И приходите проверить в следующую ' \
-                 f'пятницу {next_friday.strftime("%Y-%m-%d")}'
+        reply += f'\n\nЗаходите снова в следующую пятницу {next_friday.strftime("%d.%m.%Y")}, а пока не забудьте удалить этот чат!'
+        unused_invites = get_unused_invite_count(user['id'])
+        if unused_invites > 0:
+            reply += f'\n\nВы еще не использовали свои приглашения, пожалуйста пригласите друзей!'
+        else:
+            reply += f'\n\nВы уже использовали оба ваших приглашения. Ура!'
     else:
         reply += f'\n\n Цель достигнута! Нас больше миллиона! Инструкции появятся вместо этого сообщения как только' \
                  f' наша команда придёт в себя после празднования этого события!'
@@ -1046,7 +1058,7 @@ def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
           [telegram.KeyboardButton("Общая картина")],
           [telegram.KeyboardButton("Мой город")],
           [telegram.KeyboardButton("Сменить пароль")],
-          [telegram.KeyboardButton("Подробности")], 
+          [telegram.KeyboardButton("Подробности")],
           [telegram.KeyboardButton("Выход")],
           [telegram.KeyboardButton("Обратная связь")],
           [telegram.KeyboardButton("Удалить аккаунт")]]
