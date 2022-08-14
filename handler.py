@@ -237,7 +237,7 @@ def chat_reaction2(bot, update):
             context = {'invite': result['id']}
             chat_id = update.message.chat.id
             set_chat_context(chat_id, json.dumps(context))
-            return 7
+            return 44
         else:
             return 5
 
@@ -557,6 +557,24 @@ def chat_reaction37(bot, update):
     if text != "Согласен / Согласна":
         return 0
     return 26
+
+
+def chat_reaction44(bot, update):
+    town_name = update.message.text.strip().capitalize()
+    town_id = None
+    user = get_current_user(update.message.chat.id)
+    with DATABASE.cursor() as cur:
+        cur.execute(f'SELECT * FROM towns WHERE town="{town_name}"')
+        if cur.rowcount > 0:
+            town = cur.fetchone()
+            town_id = town['id']
+    if town_id is None:
+        return 45
+
+    with DATABASE.cursor() as cur:
+        cur.execute(f'UPDATE users SET town={town_id} WHERE id={user["id"]}')
+        DATABASE.commit()
+    return 7
 
 
 def chat_output0(bot, chat_id, update):
@@ -986,6 +1004,17 @@ def chat_output43(bot, chat_id, update):
     reply = texts[43]
     send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
     set_chat_state(chat_id, 3)
+
+
+def chat_output44(bot, chat_id, update):
+    reply = texts[23]
+    bot.sendMessage(chat_id=chat_id, text=reply)
+
+
+def chat_output45(bot, chat_id, update):
+    reply = texts[45]
+    bot.sendMessage(bot, chat_id, reply)
+    set_chat_state(chat_id, 44)
 
 
 def send_password_writedown_reminder(bot, chat_id):
