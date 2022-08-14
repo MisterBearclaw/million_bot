@@ -645,10 +645,15 @@ def chat_output15(bot, chat_id, update):
 
 def chat_output16(bot, chat_id, update):
     reply = 'Мои неиспользованные приглашения:\n'
+    not_fulfilling_sons = []
     with DATABASE.cursor() as cur:
-        cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount from '
-                    f'invites inner join chats on invites.createdBy  = chats.affiliatedUser left join users on '
-                    f'invites.usedBy = users.id where chats.id={chat_id}')
+        cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount, '
+                    f'count(i2.id) as usedInvites from invites inner join chats '
+                    f'on invites.createdBy = chats.affiliatedUser left join users on ' 
+                    f'invites.usedBy = users.id left join invites i2'
+                    f' on i2.createdBy = users.id and i2.usedBy is not null '
+                    f'where chats.id={chat_id} '
+                    f'group by invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount')
         invite_objects = cur.fetchall()
     total_unused = 0
     total_used = 0
@@ -663,7 +668,8 @@ def chat_output16(bot, chat_id, update):
             reply += f'Код приглашения: {invite["invite"]}\n'
         else:
             total_used += 1
-
+            if invite['usedInvites'] < 2:
+                not_fulfilling_sons.append(invite['login'])
     if total_unused == 0:
         reply = texts['thanks_for_inviting']
     else:
@@ -672,8 +678,14 @@ def chat_output16(bot, chat_id, update):
         reply = texts['dont_forget_to_invite']
     if total_used == 0:
         send_message_with_logged_in_keyboard(bot, chat_id, reply)
+        if len(not_fulfilling_sons) > 0:
+            reply2 = texts['sons_not_inviting'].format(", ".join(not_fulfilling_sons))
+            send_message_with_logged_in_keyboard(bot, chat_id, reply2)
         set_chat_state(chat_id, 11)
     else:
+        if len(not_fulfilling_sons) > 0:
+            reply2 = texts['sons_not_inviting'].format(", ".join(not_fulfilling_sons))
+            send_message_with_logged_in_keyboard(bot, chat_id, reply2)
         kb = [[telegram.KeyboardButton("Назад")],
               [telegram.KeyboardButton("Разрешить приглашённым вход без пароля")]]
         kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
