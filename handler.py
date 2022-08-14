@@ -699,6 +699,7 @@ def chat_output16(bot, chat_id, update):
         reply = texts['thanks_for_inviting']
     else:
         reply += use_hint
+        reply += '\nНе приглашайте людей, которым вы не доверяете полностью!'
         bot.sendMessage(chat_id=chat_id, text=reply)
         reply = texts['dont_forget_to_invite']
     if total_used == 0:
