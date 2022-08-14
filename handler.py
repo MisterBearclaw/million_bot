@@ -332,6 +332,7 @@ def chat_reaction10(bot, update):
     set_chat_context(chat_id, "")
     set_chat_user(chat_id, new_user_id)
     increase_chat_user_creation(chat_id)
+    send_password_writedown_reminder(bot, chat_id)
     return 11
 
 
@@ -997,6 +998,11 @@ def chat_output43(bot, chat_id, update):
     reply = texts[43]
     send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
     set_chat_state(chat_id, 3)
+
+
+def send_password_writedown_reminder(bot, chat_id):
+    bot.sendMessage(chat_id=chat_id, text=texts['write_down_reminder'])
+
 
 
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
