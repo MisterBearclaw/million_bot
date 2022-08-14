@@ -1033,7 +1033,6 @@ def send_password_writedown_reminder(bot, chat_id):
     bot.sendMessage(chat_id=chat_id, text=texts['write_down_reminder'])
 
 
-
 def send_message_with_logged_in_keyboard(bot, chat_id, reply, parse_mode=None):
     kb = [[telegram.KeyboardButton("Мои приглашения")],
           [telegram.KeyboardButton("Общая картина")],
