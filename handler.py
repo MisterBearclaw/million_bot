@@ -463,6 +463,13 @@ def chat_reaction29(bot, update):
     chat_id = update.message.chat.id
     user = get_current_user(chat_id)
     with DATABASE.cursor() as cur:
+        cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy'
+                    f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
+        if cur.rowcount > 0:
+            parent_chat = cur.fetchone()
+            parent_chat_id = parent_chat['id']
+            bot.sendMessage(chat_id=parent_chat_id, text=texts['child_left'])
+    with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
         DATABASE.commit()
     decrement_child_count(user['parentUserId'])
