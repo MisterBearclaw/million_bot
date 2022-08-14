@@ -1025,7 +1025,7 @@ def chat_output44(bot, chat_id, update):
 
 def chat_output45(bot, chat_id, update):
     reply = texts[45]
-    bot.sendMessage(bot, chat_id, reply)
+    bot.sendMessage(chat_id, reply)
     set_chat_state(chat_id, 44)
 
 
