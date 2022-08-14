@@ -538,6 +538,8 @@ def chat_reaction33(bot, update):
 
 def chat_reaction35(bot, update):
     text = update.message.text
+    if text == "Наши требования":
+        return 38
     if text != "Согласен / Согласна":
         return 0
     return 36
@@ -545,8 +547,6 @@ def chat_reaction35(bot, update):
 
 def chat_reaction36(bot, update):
     text = update.message.text
-    if text == "Наши требования":
-        return 38
     if text != "Согласен / Согласна":
         return 0
     return 37
@@ -957,7 +957,8 @@ def chat_output34(bot, chat_id, update):
 def chat_output35(bot, chat_id, update):
     reply = texts[35]
     kb = [[telegram.KeyboardButton("Согласен / Согласна")],
-          [telegram.KeyboardButton("Не согласен / Не согласна")]]
+          [telegram.KeyboardButton("Не согласен / Не согласна")],
+          [telegram.KeyboardButton("Наши требования")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
@@ -965,8 +966,7 @@ def chat_output35(bot, chat_id, update):
 def chat_output36(bot, chat_id, update):
     reply = texts[36]
     kb = [[telegram.KeyboardButton("Согласен / Согласна")],
-          [telegram.KeyboardButton("Не согласен / Не согласна")],
-          [telegram.KeyboardButton("Наши требования")]]
+          [telegram.KeyboardButton("Не согласен / Не согласна")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
@@ -985,7 +985,7 @@ def chat_output38(bot, chat_id, update):
           [telegram.KeyboardButton("Не согласен / Не согласна")]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
-    set_chat_state(chat_id, 36)
+    set_chat_state(chat_id, 35)
 
 
 def chat_output39(bot, chat_id, update):
