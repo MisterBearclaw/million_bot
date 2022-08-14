@@ -376,7 +376,7 @@ def chat_reaction14(bot, update):
 
 def chat_reaction16(bot, update):
     text = update.message.text
-    if text != "Разрешить приглашённым вход без пароля":
+    if text != "Разрешить приглашенным входить без пароля в течение 5 минут":
         return 11
     user = get_current_user(update.message.chat.id)
     with DATABASE.cursor() as cur:
@@ -713,7 +713,7 @@ def chat_output16(bot, chat_id, update):
             reply2 = texts['sons_not_inviting'].format(", ".join(not_fulfilling_sons))
             send_message_with_logged_in_keyboard(bot, chat_id, reply2)
         kb = [[telegram.KeyboardButton("Назад")],
-              [telegram.KeyboardButton("Разрешить приглашённым вход без пароля")]]
+              [telegram.KeyboardButton("Разрешить приглашенным входить без пароля в течение 5 минут")]]
         kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
         bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
 
