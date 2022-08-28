@@ -1214,9 +1214,9 @@ def send_current_state_image(bot, chat_id):
     image = Image.new('RGB', (width, height), (255, 255, 255))
     canvas = ImageDraw.Draw(image)
     black = (0, 0, 0)
-    line_color = (100, 50, 255)
-    bar_color = (150, 100, 255)
-    bar_outline_color = (130, 80, 235)
+    line_color = (255, 127, 80)
+    bar_color = (30, 161, 161)
+    bar_outline_color = (0, 131, 131)
 
     top_left = (padding, padding)
     origin = (padding, height - padding)
@@ -1228,8 +1228,8 @@ def send_current_state_image(bot, chat_id):
     canvas.line([top_left, (padding - arrow_width, padding + arrow_length)], black, 1)
     canvas.line([top_right, (width - padding + arrow_width, padding + arrow_length)], black, 1)
     canvas.line([top_right, (width - padding - arrow_width, padding + arrow_length)], black, 1)
-    canvas.text((6, 1), text="Total users", font=default_font, fill=black, direction='ttb', anchor='mm')
-    canvas.text((width - 60, 1), text="Users/day", font=default_font, fill=black, direction='ttb', anchor='mm')
+    canvas.text((6, 1), text="Total users", font=default_font, fill=line_color, direction='ttb', anchor='mm')
+    canvas.text((width - 60, 1), text="Users/day", font=default_font, fill=bar_color, direction='ttb', anchor='mm')
     canvas.text((width / 2 - 20, 10), text="Million", font=default_font, fill=black, direction='ttb', anchor='mm')
 
     dateval = datetime.datetime.now() - datetime.timedelta(days=6)
@@ -1245,16 +1245,16 @@ def send_current_state_image(bot, chat_id):
         dateval = dateval + datetime.timedelta(days=1)
 
     val = max_graph_val
-    valstep = floor((max_graph_val - min_graph_val) / 4)
+    valstep = (max_graph_val - min_graph_val) / 4
     val_reg = max_graph_reg_val
-    valstep_reg = floor((max_graph_reg_val - min_graph_reg_val) / 4)
+    valstep_reg = (max_graph_reg_val - min_graph_reg_val) / 4
     for y in range(padding + offset_y, height - padding - offset_y + 1,
                    round((height - 2 * padding - 2 * offset_y) / 4)):
-        canvas.text((1, y), text=str(val), font=default_font, fill=black, direction='ttb', anchor='mm')
-        canvas.text((width - padding + 2, y), text=str(val_reg), font=default_font, fill=black, direction='ttb',
+        canvas.text((1, y), text=str(floor(val)), font=default_font, fill=line_color, direction='ttb', anchor='mm')
+        canvas.text((width - padding + 2, y), text=str(floor(val_reg)), font=default_font, fill=bar_color, direction='ttb',
                     anchor='mm')
-        canvas.line([(padding, y), (padding - dash_length, y)], black, 1)
-        canvas.line([(width - padding, y), (width - padding + dash_length, y)], black, 1)
+        canvas.line([(padding, y), (padding - dash_length, y)], line_color, 1)
+        canvas.line([(width - padding, y), (width - padding + dash_length, y)], bar_color, 1)
         val -= valstep
         val_reg -= valstep_reg
 
