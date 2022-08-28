@@ -706,11 +706,12 @@ def chat_output16(bot, chat_id, update):
         user = invite['login']
         use_hint = ''
         if user is None:
-            use_by_date = invite['createdOn']
-            use_by_date = use_by_date + datetime.timedelta(days=3)
-            use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
-            total_unused += 1
-            reply += f'Код приглашения: {invite["invite"]}\n'
+            if invite['usedOn'] is not None:
+                use_by_date = invite['createdOn']
+                use_by_date = use_by_date + datetime.timedelta(days=3)
+                use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
+                total_unused += 1
+                reply += f'Код приглашения: {invite["invite"]}\n'
         else:
             total_used += 1
             if invite['usedInvites'] < 2:
