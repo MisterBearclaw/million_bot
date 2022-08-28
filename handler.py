@@ -259,6 +259,18 @@ def chat_reaction3(bot, update):
         return 42
     if text == texts['btn_about_4']:
         return 43
+    if text == texts['btn_about_5']:
+        return 46
+    if text == texts['btn_about_6']:
+        return 47
+    if text == texts['btn_about_7']:
+        return 48
+    if text == texts['btn_about_8']:
+        return 49
+    if text == texts['btn_about_9']:
+        return 50
+    if text == texts['btn_about_10']:
+        return 51
     chat_id = update.message.chat.id
     context = get_chat_context(chat_id)
     if context['return'] is None:
@@ -469,17 +481,18 @@ def chat_reaction29(bot, update):
         return 11
     chat_id = update.message.chat.id
     user = get_current_user(chat_id)
-    with DATABASE.cursor() as cur:
-        cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy'
-                    f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
-        if cur.rowcount > 0:
-            parent_chat = cur.fetchone()
-            parent_chat_id = parent_chat['id']
-            bot.sendMessage(chat_id=parent_chat_id, text=texts['child_left'])
-    with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
-        DATABASE.commit()
-    decrement_child_count(user['parentUserId'])
+    if user['kidCount'] < 2:
+        with DATABASE.cursor() as cur:
+            cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy'
+                        f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
+            if cur.rowcount > 0:
+                parent_chat = cur.fetchone()
+                parent_chat_id = parent_chat['id']
+                bot.sendMessage(chat_id=parent_chat_id, text=texts['child_left'])
+        with DATABASE.cursor() as cur:
+            cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
+            DATABASE.commit()
+        decrement_child_count(user['parentUserId'])
     with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE chats SET affiliatedUser = NULL, createdUserCount = 0 WHERE affiliatedUser = {user["id"]}')
         DATABASE.commit()
@@ -608,7 +621,7 @@ def chat_output2(bot, chat_id, update):
 
 def chat_output3(bot, chat_id, update):
     reply = texts[3]
-    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
 
 
 def chat_output5(bot, chat_id, update):
@@ -693,11 +706,12 @@ def chat_output16(bot, chat_id, update):
         user = invite['login']
         use_hint = ''
         if user is None:
-            use_by_date = invite['createdOn']
-            use_by_date = use_by_date + datetime.timedelta(days=3)
-            use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
-            total_unused += 1
-            reply += f'Код приглашения: {invite["invite"]}\n'
+            if invite['usedOn'] is not None:
+                use_by_date = invite['createdOn']
+                use_by_date = use_by_date + datetime.timedelta(days=3)
+                use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
+                total_unused += 1
+                reply += f'Код приглашения: {invite["invite"]}\n'
         else:
             total_used += 1
             if invite['usedInvites'] < 2:
@@ -726,7 +740,7 @@ def chat_output16(bot, chat_id, update):
 
 
 def chat_output17(bot, chat_id, update):
-    # send_current_state_image(bot, chat_id)
+    send_current_state_image(bot, chat_id)
     with DATABASE.cursor() as cur:
         cur.execute("SELECT count(*) AS numUsers FROM users")
         count = cur.fetchone()
@@ -1022,19 +1036,19 @@ def chat_output40(bot, chat_id, update):
 
 def chat_output41(bot, chat_id, update):
     reply = texts[41]
-    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
     set_chat_state(chat_id, 3)
 
 
 def chat_output42(bot, chat_id, update):
-    reply = texts[42]
-    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    reply = texts[38]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
     set_chat_state(chat_id, 3)
 
 
 def chat_output43(bot, chat_id, update):
     reply = texts[43]
-    send_message_with_about_keyboard(bot, chat_id, reply, 'MarkdownV2')
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
     set_chat_state(chat_id, 3)
 
 
@@ -1047,6 +1061,43 @@ def chat_output45(bot, chat_id, update):
     reply = texts[45]
     bot.sendMessage(chat_id, reply)
     set_chat_state(chat_id, 44)
+
+
+def chat_output46(bot, chat_id, update):
+    reply = texts[46]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output47(bot, chat_id, update):
+    reply = texts[47]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output48(bot, chat_id, update):
+    reply = texts[48]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output49(bot, chat_id, update):
+    reply = texts[42]  # not a bug! 42 is the text about safety principles
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output50(bot, chat_id, update):
+    reply = texts[50]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
+    set_chat_state(chat_id, 3)
+
+
+def chat_output51(bot, chat_id, update):
+    reply = texts[51]
+    send_message_with_about_keyboard(bot, chat_id, reply, 'Markdown')
+    set_chat_state(chat_id, 3)
+
 
 
 def send_password_writedown_reminder(bot, chat_id):
@@ -1085,10 +1136,15 @@ def send_message_with_about_keyboard(bot, chat_id, reply, parse_mode=None):
           [telegram.KeyboardButton(texts['btn_about_2'])],
           [telegram.KeyboardButton(texts['btn_about_3'])],
           [telegram.KeyboardButton(texts['btn_about_4'])],
+          [telegram.KeyboardButton(texts['btn_about_5'])],
+          [telegram.KeyboardButton(texts['btn_about_6'])],
+          [telegram.KeyboardButton(texts['btn_about_7'])],
+          [telegram.KeyboardButton(texts['btn_about_8'])],
+          [telegram.KeyboardButton(texts['btn_about_9'])],
+          [telegram.KeyboardButton(texts['btn_about_10'])],
           [telegram.KeyboardButton(texts['btn_back'])]]
     kb_markup = telegram.ReplyKeyboardMarkup(kb, one_time_keyboard=True)
     if parse_mode is not None:
-        reply = escape_tg_punctuation(reply)
         bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup, parse_mode=parse_mode)
     else:
         bot.sendMessage(chat_id=chat_id, text=reply, reply_markup=kb_markup)
@@ -1102,7 +1158,7 @@ def escape_tg(in_string):
 
 
 def escape_tg_punctuation(in_string):
-    return in_string.replace('.', '\\.').replace('(', '\\(').replace(')', '\\)').replace('=', '\\=').replace('!', '\\!')
+    return in_string.replace('.', '\\.').replace('(', '\\(').replace(')', '\\)').replace('=', '\\=').replace('!', '\\!').replace('-', '\\-')
 
 
 def send_current_state_image(bot, chat_id):
