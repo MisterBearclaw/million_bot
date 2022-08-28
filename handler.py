@@ -331,11 +331,12 @@ def chat_reaction10(bot, update):
     inviting_user_id = invite_object['createdBy']
     with DATABASE.cursor() as cur:
         login = context['login']
+        town = context['townId']
         parent = "NULL"
         if isinstance(inviting_user_id, numbers.Number):
             parent = inviting_user_id
         cur.execute(
-            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount, createdOn) VALUES("{login}", "{password_hash}", now(), {parent}, 0, CURDATE())')
+            f'INSERT INTO users (login, password, last_login, parentUserId, kidCount, town, createdOn) VALUES("{login}", "{password_hash}", now(), {parent}, 0, {town}, CURDATE())')
         DATABASE.commit()
         new_user_id = cur.lastrowid
     with DATABASE.cursor() as cur:
@@ -589,7 +590,6 @@ def chat_reaction37(bot, update):
 def chat_reaction44(bot, update):
     town_name = update.message.text.strip().capitalize()
     town_id = None
-    user = get_current_user(update.message.chat.id)
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM towns WHERE town="{town_name}"')
         if cur.rowcount > 0:
@@ -597,10 +597,10 @@ def chat_reaction44(bot, update):
             town_id = town['id']
     if town_id is None:
         return 45
-
-    with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE users SET town={town_id} WHERE id={user["id"]}')
-        DATABASE.commit()
+    chat_id = update.message.chat.id
+    context = get_chat_context(chat_id)
+    context['townId'] = town_id
+    set_chat_context(chat_id, json.dumps(context))
     return 7
 
 
