@@ -481,17 +481,18 @@ def chat_reaction29(bot, update):
         return 11
     chat_id = update.message.chat.id
     user = get_current_user(chat_id)
-    with DATABASE.cursor() as cur:
-        cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy'
-                    f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
-        if cur.rowcount > 0:
-            parent_chat = cur.fetchone()
-            parent_chat_id = parent_chat['id']
-            bot.sendMessage(chat_id=parent_chat_id, text=texts['child_left'])
-    with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
-        DATABASE.commit()
-    decrement_child_count(user['parentUserId'])
+    if user['kidCount'] < 2:
+        with DATABASE.cursor() as cur:
+            cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy'
+                        f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
+            if cur.rowcount > 0:
+                parent_chat = cur.fetchone()
+                parent_chat_id = parent_chat['id']
+                bot.sendMessage(chat_id=parent_chat_id, text=texts['child_left'])
+        with DATABASE.cursor() as cur:
+            cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
+            DATABASE.commit()
+        decrement_child_count(user['parentUserId'])
     with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE chats SET affiliatedUser = NULL, createdUserCount = 0 WHERE affiliatedUser = {user["id"]}')
         DATABASE.commit()
@@ -738,7 +739,7 @@ def chat_output16(bot, chat_id, update):
 
 
 def chat_output17(bot, chat_id, update):
-    # send_current_state_image(bot, chat_id)
+    send_current_state_image(bot, chat_id)
     with DATABASE.cursor() as cur:
         cur.execute("SELECT count(*) AS numUsers FROM users")
         count = cur.fetchone()
