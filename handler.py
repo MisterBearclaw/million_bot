@@ -71,7 +71,7 @@ def get_chat_state(chat_id):
                 state = result["state"]
     if state == -1:
         with DATABASE.cursor() as cur:
-            cur.execute(f'INSERT INTO chats VALUES({chat_id}, 0, now(), "", NULL)')
+            cur.execute(f'INSERT INTO chats VALUES({chat_id}, 0, now(), "", NULL, 0)')
             DATABASE.commit()
             state = 0
     return state
