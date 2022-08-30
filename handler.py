@@ -484,7 +484,7 @@ def chat_reaction29(bot, update):
     user = get_current_user(chat_id)
     if user['kidCount'] < 2:
         with DATABASE.cursor() as cur:
-            cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy'
+            cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy '
                         f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
             if cur.rowcount > 0:
                 parent_chat = cur.fetchone()
