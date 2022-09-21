@@ -689,7 +689,7 @@ def chat_output15(bot, chat_id, update):
 
 
 def chat_output16(bot, chat_id, update):
-    reply = 'Мои неиспользованные приглашения:\n'
+
     not_fulfilling_sons = []
     with DATABASE.cursor() as cur:
         cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount, '
@@ -702,6 +702,7 @@ def chat_output16(bot, chat_id, update):
         invite_objects = cur.fetchall()
     total_unused = 0
     total_used = 0
+    unused_invite_codes = []
     for invite in invite_objects:
         user = invite['login']
         use_hint = ''
@@ -710,7 +711,7 @@ def chat_output16(bot, chat_id, update):
             use_by_date = use_by_date + datetime.timedelta(days=3)
             use_hint = f'Рекоммендуем использовать до {use_by_date.strftime("%Y-%m-%d")}'
             total_unused += 1
-            reply += f'Код приглашения: {invite["invite"]}\n'
+            unused_invite_codes.append(f'{invite["invite"]}\n')
         else:
             total_used += 1
             if invite['usedInvites'] < 2:
@@ -718,15 +719,16 @@ def chat_output16(bot, chat_id, update):
     if total_unused == 0:
         reply = texts['thanks_for_inviting']
     else:
-        reply += use_hint
+        reply = 'Мои неиспользованные приглашения:\n'
+        bot.sendMessage(chat_id=chat_id, text=reply)
+        for invite in unused_invite_codes:
+            bot.sendMessage(chat_id=chat_id, text=invite)
+        reply = use_hint
         reply += '\nНе приглашайте людей, которым вы не доверяете полностью!'
         bot.sendMessage(chat_id=chat_id, text=reply)
         reply = texts['dont_forget_to_invite']
     if total_used == 0:
         send_message_with_logged_in_keyboard(bot, chat_id, reply)
-        if len(not_fulfilling_sons) > 0:
-            reply2 = texts['sons_not_inviting'].format(", ".join(not_fulfilling_sons))
-            send_message_with_logged_in_keyboard(bot, chat_id, reply2)
         set_chat_state(chat_id, 11)
     else:
         if len(not_fulfilling_sons) > 0:
