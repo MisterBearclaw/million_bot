@@ -54,6 +54,17 @@ def configure_telegram():
     return telegram.Bot(TELEGRAM_TOKEN)
 
 
+def db_strip(unsecure_variable):
+    special_chars = "&%*;'\"\\\'"
+    if isinstance(unsecure_variable, numbers.Number):
+        return unsecure_variable
+    return ''.join(e for e in unsecure_variable if e not in special_chars)
+
+
+def db_safer_strip(unsecure_variable):
+    return ''.join(e for e in unsecure_variable if e.isalnum() or e.isspace())
+
+
 def get_chat_hash(chat_id):
     chat_hash = hashlib.sha1((str(chat_id) + CHAT_ID_SALT).encode("ascii")).hexdigest()
     return chat_hash
@@ -83,6 +94,9 @@ def get_chat_state(chat_id):
 
 
 def set_chat_state(chat_id, new_state):
+    if not isinstance(new_state, numbers.Number):
+        logger.error(f"Tried to set {new_state} as chat state")
+        return
     logger.info(f'Setting state in DB to {new_state}')
     with DATABASE.cursor() as cur:
         chat_hash = get_chat_hash(chat_id)
@@ -91,6 +105,9 @@ def set_chat_state(chat_id, new_state):
 
 
 def set_chat_user(chat_id, user_id):
+    if not isinstance(user_id, numbers.Number):
+        logger.error(f"Tried to set {user_id} as user id")
+        return
     logger.info(f'Setting user in DB to {user_id}')
     with DATABASE.cursor() as cur:
         chat_hash = get_chat_hash(chat_id)
@@ -98,6 +115,7 @@ def set_chat_user(chat_id, user_id):
         DATABASE.commit()
 
 
+# insecure. Usages should be checked
 def set_chat_context(chat_id, new_context):
     encoded_context = new_context.replace("\'", "\\\'")
     with DATABASE.cursor() as cur:
@@ -118,6 +136,9 @@ def get_chat_context(chat_id):
 
 
 def increment_child_count(user_id):
+    if not isinstance(user_id, numbers.Number):
+        logger.error(f"Tried to provide {user_id} as user id")
+        return
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users where id={user_id}')
         if cur.rowcount == 1:
@@ -134,6 +155,9 @@ def increment_child_count(user_id):
 
 
 def decrement_child_count(user_id):
+    if not isinstance(user_id, numbers.Number):
+        logger.error(f"Tried to provide {user_id} as user id")
+        return
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users where id={user_id}')
         if cur.rowcount == 1:
@@ -149,15 +173,19 @@ def decrement_child_count(user_id):
                 increment_child_count(parent)
 
 
-def update_password(chat_id, new_password):
+# insecure. Usages should be checked
+def update_password(chat_id, new_password_hash):
     with DATABASE.cursor() as cur:
         chat_hash = get_chat_hash(chat_id)
-        cur.execute(f'UPDATE users SET password="{new_password}" WHERE '
+        cur.execute(f'UPDATE users SET password="{new_password_hash}" WHERE '
                     f'id = (SELECT affiliatedUser FROM chats WHERE id="{chat_hash}");')
     DATABASE.commit()
 
 
 def update_user_last_login(user_id):
+    if not isinstance(user_id, numbers.Number):
+        logger.error(f"Tried to provide {user_id} as user id")
+        return
     with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE users SET last_login=now() WHERE id = {user_id};')
     DATABASE.commit()
@@ -180,6 +208,9 @@ def get_current_user(chat_id):
 
 
 def get_town_name(town_key):
+    if not isinstance(town_key, numbers.Number):
+        logger.error(f"Tried to provide {town_key} as town id")
+        return
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT t2.town from towns t1 inner join towns t2 on t1.key_idx = t2.id WHERE t1.id = {town_key};')
         town = cur.fetchone()
@@ -187,6 +218,9 @@ def get_town_name(town_key):
 
 
 def get_unused_invite_count(user_id):
+    if not isinstance(user_id, numbers.Number):
+        logger.error(f"Tried to provide {user_id} as user_id")
+        return
     with DATABASE.cursor() as cur:
         cur.execute(f'select count(*) num from invites i where i.usedBy is null and i.createdBy = {user_id};')
         town = cur.fetchone()
@@ -225,7 +259,7 @@ def chat_reaction0(bot, update):
 
 
 def chat_reaction1(bot, update):
-    username = update.message.text.strip().replace('\"', '\\\"').replace('\'', '\\\'')
+    username = db_strip(update.message.text.strip())
     chat_id = update.message.chat.id
     try_to_delete_message(bot, chat_id, update)
     with DATABASE.cursor() as cur:
@@ -246,7 +280,7 @@ def chat_reaction1(bot, update):
 
 
 def chat_reaction2(bot, update):
-    invitation_key = update.message.text.lower().strip()
+    invitation_key = db_strip(update.message.text.lower().strip())
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM invites where invite="{invitation_key}"')
         if cur.rowcount > 0:
@@ -305,7 +339,7 @@ def chat_reaction4(bot, update):
 
 
 def chat_reaction7(bot, update):
-    username = update.message.text.strip().replace('\"', '\\\"').replace('\'', '\\\'')
+    username = db_strip(update.message.text.strip())
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM users where login="{username}"')
         if cur.rowcount > 0:
@@ -338,7 +372,7 @@ def chat_reaction10(bot, update):
     if password_hash != prevhash:
         return 12
     with DATABASE.cursor() as cur:
-        invite = context['invite']
+        invite = db_safer_strip(context['invite'])
         cur.execute(f'SELECT * FROM invites WHERE id={invite}')
         invite_object = cur.fetchone()
     inviting_user_id = invite_object['createdBy']
@@ -459,7 +493,7 @@ def chat_reaction21(bot, update):
 
 
 def chat_reaction23(bot, update):
-    town_name = update.message.text.strip().capitalize()
+    town_name = db_safer_strip(update.message.text.strip().capitalize())
     town_id = None
     user = get_current_user(update.message.chat.id)
     with DATABASE.cursor() as cur:
@@ -538,7 +572,7 @@ def chat_reaction32(bot, update):
         text = text[-1024:]
     if text == "Назад":
         return 11
-    text = text.replace('\'', '').replace('\"', '').replace('\\', '')
+    text = db_strip(text)
     user = get_current_user(update.message.chat.id)
     with DATABASE.cursor() as cur:
         cur.execute(f"INSERT INTO million.tickets (user_id, creation_date, question, answer, is_answered)"
@@ -559,7 +593,7 @@ def chat_reaction33(bot, update):
     with DATABASE.cursor() as cur:
         cur.execute(f"SELECT * FROM tickets WHERE id={context['ticket']}")
         ticket = cur.fetchone()
-    text = text.replace('"', '')
+    text = db_strip(text)
     with DATABASE.cursor() as cur:
         cur.execute(f'UPDATE tickets SET answer="{text}", is_answered=1 WHERE id={context["ticket"]}')
         DATABASE.commit()
@@ -596,7 +630,7 @@ def chat_reaction37(bot, update):
 
 
 def chat_reaction44(bot, update):
-    town_name = update.message.text.strip().capitalize()
+    town_name = db_safer_strip(update.message.text.strip().capitalize())
     town_id = None
     with DATABASE.cursor() as cur:
         cur.execute(f'SELECT * FROM towns WHERE town="{town_name}"')
