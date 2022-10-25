@@ -2,7 +2,6 @@ import json
 import os
 import logging
 import sys
-from math import floor, log10
 import telegram
 import pymysql
 import numbers
@@ -12,8 +11,6 @@ import random
 from datetime import datetime
 import datetime
 from texts import texts
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
 
 # Logging is cool!
 logger = logging.getLogger()
@@ -38,6 +35,8 @@ DB_DATABASE = os.environ.get('DB_DATABASE')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 BROADCAST_CODE = os.environ.get('BROADCAST_CODE')
 REPLY_CODE = os.environ.get('REPLY_CODE')
+CHAT_ID_SALT = os.environ.get('CHAT_ID_SALT')
+
 
 DATABASE = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_DATABASE,
                            cursorclass=pymysql.cursors.DictCursor)
@@ -55,10 +54,16 @@ def configure_telegram():
     return telegram.Bot(TELEGRAM_TOKEN)
 
 
+def get_chat_hash(chat_id):
+    chat_hash = hashlib.sha1((str(chat_id) + CHAT_ID_SALT).encode("ascii")).hexdigest()
+    return chat_hash
+
+
 def get_chat_state(chat_id):
     state = -1
     with DATABASE.cursor() as cur:
-        cur.execute(f'SELECT * FROM chats where id={chat_id}')
+        chat_hash = get_chat_hash(chat_id)
+        cur.execute(f'SELECT * FROM chats where id="{chat_hash}"')
         if cur.rowcount != 0:
             result = cur.fetchone()
             now = datetime.datetime.now()
@@ -71,7 +76,7 @@ def get_chat_state(chat_id):
                 state = result["state"]
     if state == -1:
         with DATABASE.cursor() as cur:
-            cur.execute(f'INSERT INTO chats VALUES({chat_id}, 0, now(), "", NULL, 0)')
+            cur.execute(f'INSERT INTO chats VALUES("{chat_hash}", 0, now(), "", NULL, 0)')
             DATABASE.commit()
             state = 0
     return state
@@ -80,28 +85,32 @@ def get_chat_state(chat_id):
 def set_chat_state(chat_id, new_state):
     logger.info(f'Setting state in DB to {new_state}')
     with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE chats SET state={new_state}, lastUpdate=now() WHERE id={chat_id}')
+        chat_hash = get_chat_hash(chat_id)
+        cur.execute(f'UPDATE chats SET state={new_state}, lastUpdate=now() WHERE id="{chat_hash}"')
         DATABASE.commit()
 
 
 def set_chat_user(chat_id, user_id):
     logger.info(f'Setting user in DB to {user_id}')
     with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE chats SET affiliatedUser={user_id}, lastUpdate=now() WHERE id={chat_id}')
+        chat_hash = get_chat_hash(chat_id)
+        cur.execute(f'UPDATE chats SET affiliatedUser={user_id}, lastUpdate=now() WHERE id="{chat_hash}"')
         DATABASE.commit()
 
 
 def set_chat_context(chat_id, new_context):
     encoded_context = new_context.replace("\'", "\\\'")
     with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE chats SET context=\'{encoded_context}\', lastUpdate=now() WHERE id={chat_id}')
+        chat_hash = get_chat_hash(chat_id)
+        cur.execute(f'UPDATE chats SET context=\'{encoded_context}\', lastUpdate=now() WHERE id="{chat_hash}"')
         DATABASE.commit()
 
 
 def get_chat_context(chat_id):
     context = {}
     with DATABASE.cursor() as cur:
-        cur.execute(f'SELECT * FROM chats where id={chat_id}')
+        chat_hash = get_chat_hash(chat_id)
+        cur.execute(f'SELECT * FROM chats where id="{chat_hash}"')
         if cur.rowcount != 0:
             result = cur.fetchone()
             context = json.loads(result['context'])
@@ -142,8 +151,9 @@ def decrement_child_count(user_id):
 
 def update_password(chat_id, new_password):
     with DATABASE.cursor() as cur:
+        chat_hash = get_chat_hash(chat_id)
         cur.execute(f'UPDATE users SET password="{new_password}" WHERE '
-                    f'id = (SELECT affiliatedUser FROM chats WHERE id={chat_id});')
+                    f'id = (SELECT affiliatedUser FROM chats WHERE id="{chat_hash}");')
     DATABASE.commit()
 
 
@@ -155,14 +165,16 @@ def update_user_last_login(user_id):
 
 def increase_chat_user_creation(chat_id):
     with DATABASE.cursor() as cur:
-        cur.execute(f'UPDATE chats SET createdUsercount = createdUsercount + 1 WHERE id = {chat_id};')
+        chat_hash = get_chat_hash(chat_id)
+        cur.execute(f'UPDATE chats SET createdUsercount = createdUsercount + 1 WHERE id = "{chat_hash}";')
     DATABASE.commit()
 
 
 def get_current_user(chat_id):
     with DATABASE.cursor() as cur:
+        chat_hash = get_chat_hash(chat_id)
         cur.execute(f'SELECT users.* FROM users INNER JOIN chats ON users.id = chats.affiliatedUser'
-                    f' WHERE chats.id={chat_id};')
+                    f' WHERE chats.id="{chat_hash}";')
         user = cur.fetchone()
     return user
 
@@ -202,7 +214,8 @@ def chat_reaction0(bot, update):
     elif text == "Регистрация":
         chat_id = update.message.chat.id
         with DATABASE.cursor() as cur:
-            cur.execute(f'SELECT * FROM chats where id="{chat_id}"')
+            chat_hash = get_chat_hash(chat_id)
+            cur.execute(f'SELECT * FROM chats where id="{chat_hash}"')
             chat = cur.fetchone()
             if chat['createdUserCount'] > 1:
                 return 28
@@ -484,13 +497,6 @@ def chat_reaction29(bot, update):
     user = get_current_user(chat_id)
     if user['kidCount'] < 2:
         with DATABASE.cursor() as cur:
-            cur.execute(f'select c.id from invites i inner join users u on u.id =i.createdBy '
-                        f'inner join chats c on c.affiliatedUser = u.id where i.usedBy = {user["id"]};')
-            if cur.rowcount > 0:
-                parent_chat = cur.fetchone()
-                parent_chat_id = parent_chat['id']
-                bot.sendMessage(chat_id=parent_chat_id, text=texts['child_left'])
-        with DATABASE.cursor() as cur:
             cur.execute(f'UPDATE invites SET usedBy = NULL, usedOn = NULL WHERE usedBy = {user["id"]}')
             DATABASE.commit()
         decrement_child_count(user['parentUserId'])
@@ -507,19 +513,21 @@ def chat_reaction31(bot, update):
     text = update.message.text
     if text == "Отмена":
         return 0
-    with DATABASE.cursor() as cur:
-        cur.execute(f'SELECT * FROM chats')
-        chats = cur.fetchall()
-    success = 0
-    fail = 0
-    for chat in chats:
-        try:
-            bot.sendMessage(chat_id=chat['id'], text=text)
-            success += 1
-        except:
-            fail += 1
+    # with DATABASE.cursor() as cur:
+    #     cur.execute(f'SELECT * FROM chats')
+    #     chats = cur.fetchall()
+    # success = 0
+    # fail = 0
+    # for chat in chats:
+    #     try:
+    #         bot.sendMessage(chat_id=chat['id'], text=text)
+    #         success += 1
+    #     except:
+    #         fail += 1
     chat_id = update.message.chat.id
-    reply = f"Сообщение разослано {fail + success} раз. {100 * success / (success + fail):.2f}% успешно"
+    # reply = f"Сообщение разослано {fail + success} раз. {100 * success / (success + fail):.2f}% успешно"
+    # bot.sendMessage(chat_id=chat_id, text=reply)
+    reply = f"Массовая рассылка отключена по соображениям безопасности"
     bot.sendMessage(chat_id=chat_id, text=reply)
     return 0
 
@@ -556,11 +564,11 @@ def chat_reaction33(bot, update):
         cur.execute(f'UPDATE tickets SET answer="{text}", is_answered=1 WHERE id={context["ticket"]}')
         DATABASE.commit()
 
-    with DATABASE.cursor() as cur:
-        cur.execute(f'SELECT * FROM chats WHERE affiliatedUser={ticket["user_id"]}')
-        if cur.rowcount != 0:
-            author_chat = cur.fetchone()
-            bot.sendMessage(chat_id=author_chat['id'], text="Получен ответ на Ваш вопрос")
+    # with DATABASE.cursor() as cur:
+    #     cur.execute(f'SELECT * FROM chats WHERE affiliatedUser={ticket["user_id"]}')
+    #    if cur.rowcount != 0:
+    #        author_chat = cur.fetchone()
+    #        bot.sendMessage(chat_id=author_chat['id'], text="Получен ответ на Ваш вопрос")
     return 33
 
 
@@ -628,7 +636,6 @@ def chat_output5(bot, chat_id, update):
     reply = texts[5]
     send_message_with_intro_keyboard(bot, chat_id, reply)
     set_chat_state(chat_id, 0)
-    logger.info('Message sent')
 
 
 def chat_output6(bot, chat_id, update):
@@ -689,15 +696,15 @@ def chat_output15(bot, chat_id, update):
 
 
 def chat_output16(bot, chat_id, update):
-
     not_fulfilling_sons = []
     with DATABASE.cursor() as cur:
+        chat_hash = get_chat_hash(chat_id)
         cur.execute(f'select invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount, '
                     f'count(i2.id) as usedInvites from invites inner join chats '
                     f'on invites.createdBy = chats.affiliatedUser left join users on '
                     f'invites.usedBy = users.id left join invites i2'
                     f' on i2.createdBy = users.id and i2.usedBy is not null '
-                    f'where chats.id={chat_id} '
+                    f'where chats.id="{chat_hash}" '
                     f'group by invites.invite, invites.createdOn, invites.usedOn, users.login, users.kidCount')
         invite_objects = cur.fetchall()
     total_unused = 0
@@ -741,7 +748,7 @@ def chat_output16(bot, chat_id, update):
 
 
 def chat_output17(bot, chat_id, update):
-    send_current_state_image(bot, chat_id)
+    # send_current_state_image(bot, chat_id)
     with DATABASE.cursor() as cur:
         cur.execute("SELECT count(*) AS numUsers FROM users")
         count = cur.fetchone()
@@ -1100,7 +1107,6 @@ def chat_output51(bot, chat_id, update):
     set_chat_state(chat_id, 3)
 
 
-
 def send_password_writedown_reminder(bot, chat_id):
     bot.sendMessage(chat_id=chat_id, text=texts['write_down_reminder'])
 
@@ -1159,130 +1165,132 @@ def escape_tg(in_string):
 
 
 def escape_tg_punctuation(in_string):
-    return in_string.replace('.', '\\.').replace('(', '\\(').replace(')', '\\)').replace('=', '\\=').replace('!', '\\!').replace('-', '\\-')
+    return in_string.replace('.', '\\.').replace('(', '\\(').replace(')', '\\)').replace('=', '\\=').replace('!',
+                                                                                                             '\\!').replace(
+        '-', '\\-')
 
 
-def send_current_state_image(bot, chat_id):
-    with DATABASE.cursor() as cur:
-        cur.execute(f'SELECT num FROM(    select count(*) as num from users u where u.createdOn <= CURDATE() - 0    '
-                    f'UNION ALL select count(*) as c from users u where u.createdOn <= CURDATE() - 1    UNION ALL '
-                    f'select count(*) as c from users u where u.createdOn <= CURDATE() - 2    UNION ALL select count('
-                    f'*) as c from users u where u.createdOn <= CURDATE() - 3    UNION All select count(*) as c from '
-                    f'users u where u.createdOn <= CURDATE() - 4   UNION All select count(*) as c from users u where '
-                    f'u.createdOn <= CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn '
-                    f'<= CURDATE() - 6 UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() '
-                    f'UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() - 1    UNION ALL '
-                    f'select count(*) as c from users u where u.createdOn = CURDATE() - 2    UNION ALL select count('
-                    f'*) as c from users u where u.createdOn = CURDATE() - 3    UNION All select count(*) as c from '
-                    f'users u where u.createdOn = CURDATE() - 4    UNION All select count(*) as c from users u where '
-                    f'u.createdOn = CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn = '
-                    f'CURDATE() - 6) as sums')  # if you are trying to read it, well... oops:)
-        sums = cur.fetchall()
-    max_val = sums[0]['num']
-    min_val = sums[6]['num']
-    min_reg_val = max_reg_val = sums[7]['num']
-    for i in range(8, 14):
-        if min_reg_val > sums[i]['num']:
-            min_reg_val = sums[i]['num']
-        if max_reg_val < sums[i]['num']:
-            max_reg_val = sums[i]['num']
-    if max_reg_val == 0 or max_val == 0:
-        return
-    order_of_magnitude = floor(log10(max_val))
-    order_of_reg_magnitude = floor(log10(max_reg_val))
-    max_graph_val = ((max_val // (10 ** order_of_magnitude)) + 1) * 10 ** order_of_magnitude
-    max_graph_reg_val = ((max_reg_val // (10 ** order_of_reg_magnitude)) + 1) * 10 ** order_of_reg_magnitude
-    min_graph_val = max_graph_val
-    while min_graph_val > min_val:
-        min_graph_val -= 10 ** order_of_magnitude
-    graph_range_y = max_graph_val - min_graph_val
-    min_graph_reg_val = max_graph_reg_val
-    while min_graph_reg_val > min_reg_val:
-        min_graph_reg_val -= 10 ** order_of_reg_magnitude
-    graph_range_reg_y = max_graph_reg_val - min_graph_reg_val
+# def send_current_state_image(bot, chat_id):
+#    with DATABASE.cursor() as cur:
+#        cur.execute(f'SELECT num FROM(    select count(*) as num from users u where u.createdOn <= CURDATE() - 0    '
+#                    f'UNION ALL select count(*) as c from users u where u.createdOn <= CURDATE() - 1    UNION ALL '
+#                    f'select count(*) as c from users u where u.createdOn <= CURDATE() - 2    UNION ALL select count('
+#                    f'*) as c from users u where u.createdOn <= CURDATE() - 3    UNION All select count(*) as c from '
+#                    f'users u where u.createdOn <= CURDATE() - 4   UNION All select count(*) as c from users u where '
+#                    f'u.createdOn <= CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn '
+#                    f'<= CURDATE() - 6 UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() '
+#                    f'UNION ALL select count(*) as c from users u where u.createdOn = CURDATE() - 1    UNION ALL '
+#                    f'select count(*) as c from users u where u.createdOn = CURDATE() - 2    UNION ALL select count('
+#                    f'*) as c from users u where u.createdOn = CURDATE() - 3    UNION All select count(*) as c from '
+#                    f'users u where u.createdOn = CURDATE() - 4    UNION All select count(*) as c from users u where '
+#                    f'u.createdOn = CURDATE() - 5    UNION All select count(*) as c from users u where u.createdOn = '
+#                    f'CURDATE() - 6) as sums')  # if you are trying to read it, well... oops:)
+#        sums = cur.fetchall()
+#    max_val = sums[0]['num']
+#    min_val = sums[6]['num']
+#    min_reg_val = max_reg_val = sums[7]['num']
+#    for i in range(8, 14):
+#        if min_reg_val > sums[i]['num']:
+#            min_reg_val = sums[i]['num']
+#        if max_reg_val < sums[i]['num']:
+#            max_reg_val = sums[i]['num']
+#    if max_reg_val == 0 or max_val == 0:
+#        return
+#    order_of_magnitude = floor(log10(max_val))
+#    order_of_reg_magnitude = floor(log10(max_reg_val))
+#    max_graph_val = ((max_val // (10 ** order_of_magnitude)) + 1) * 10 ** order_of_magnitude
+#    max_graph_reg_val = ((max_reg_val // (10 ** order_of_reg_magnitude)) + 1) * 10 ** order_of_reg_magnitude
+#    min_graph_val = max_graph_val
+#    while min_graph_val > min_val:
+#        min_graph_val -= 10 ** order_of_magnitude
+#    graph_range_y = max_graph_val - min_graph_val
+#    min_graph_reg_val = max_graph_reg_val
+#    while min_graph_reg_val > min_reg_val:
+#        min_graph_reg_val -= 10 ** order_of_reg_magnitude
+#    graph_range_reg_y = max_graph_reg_val - min_graph_reg_val
 
-    width = 300
-    height = 300
-    arrow_length = 3
-    arrow_width = 2
-    padding = 20
-    offset_x = 10
-    offset_y = 10
-    value_zone_y = height - 2 * padding - 2 * offset_y
-    value_zone_x = width - 2 * padding - 2 * offset_x
-    dash_length = 2
-    bar_width = 14
-    image = Image.new('RGB', (width, height), (255, 255, 255))
-    canvas = ImageDraw.Draw(image)
-    black = (0, 0, 0)
-    line_color = (255, 127, 80)
-    bar_color = (30, 161, 161)
-    bar_outline_color = (0, 131, 131)
+#    width = 300
+#    height = 300
+#    arrow_length = 3
+#    arrow_width = 2
+#    padding = 20
+#    offset_x = 10
+#    offset_y = 10
+#    value_zone_y = height - 2 * padding - 2 * offset_y
+#    value_zone_x = width - 2 * padding - 2 * offset_x
+#    dash_length = 2
+#    bar_width = 14
+#    image = Image.new('RGB', (width, height), (255, 255, 255))
+#    canvas = ImageDraw.Draw(image)
+#    black = (0, 0, 0)
+#    line_color = (255, 127, 80)
+#    bar_color = (30, 161, 161)
+#    bar_outline_color = (0, 131, 131)
 
-    top_left = (padding, padding)
-    origin = (padding, height - padding)
-    bottom_right = (width - padding, height - padding)
-    top_right = (width - padding, padding)
-    default_font = ImageFont.load_default()
-    canvas.line([top_left, origin, bottom_right, top_right], black, 1)
-    canvas.line([top_left, (padding + arrow_width, padding + arrow_length)], black, 1)
-    canvas.line([top_left, (padding - arrow_width, padding + arrow_length)], black, 1)
-    canvas.line([top_right, (width - padding + arrow_width, padding + arrow_length)], black, 1)
-    canvas.line([top_right, (width - padding - arrow_width, padding + arrow_length)], black, 1)
-    canvas.text((6, 1), text="Total users", font=default_font, fill=line_color, direction='ttb', anchor='mm')
-    canvas.text((width - 60, 1), text="Users/day", font=default_font, fill=bar_color, direction='ttb', anchor='mm')
-    canvas.text((width / 2 - 20, 10), text="Million", font=default_font, fill=black, direction='ttb', anchor='mm')
+#    top_left = (padding, padding)
+#    origin = (padding, height - padding)
+#    bottom_right = (width - padding, height - padding)
+#    top_right = (width - padding, padding)
+#    default_font = ImageFont.load_default()
+#    canvas.line([top_left, origin, bottom_right, top_right], black, 1)
+#    canvas.line([top_left, (padding + arrow_width, padding + arrow_length)], black, 1)
+#    canvas.line([top_left, (padding - arrow_width, padding + arrow_length)], black, 1)
+#    canvas.line([top_right, (width - padding + arrow_width, padding + arrow_length)], black, 1)
+#    canvas.line([top_right, (width - padding - arrow_width, padding + arrow_length)], black, 1)
+#    canvas.text((6, 1), text="Total users", font=default_font, fill=line_color, direction='ttb', anchor='mm')
+#    canvas.text((width - 60, 1), text="Users/day", font=default_font, fill=bar_color, direction='ttb', anchor='mm')
+#    canvas.text((width / 2 - 20, 10), text="Million", font=default_font, fill=black, direction='ttb', anchor='mm')
 
-    dateval = datetime.datetime.now() - datetime.timedelta(days=6)
-    for x in range(padding + offset_x, width - padding - offset_x + 1, round((width - 2 * padding - 2 * offset_x) / 6)):
-        canvas.line([(x, height - padding), (x, height - padding + dash_length)], black, 1)
-        canvas.text(
-            (x - 10, height - padding + dash_length),
-            text=dateval.strftime("%d/%m"),
-            font=default_font, fill=black,
-            direction='ttb',
-            anchor='mm'
-        )
-        dateval = dateval + datetime.timedelta(days=1)
+#    dateval = datetime.datetime.now() - datetime.timedelta(days=6)
+#    for x in range(padding + offset_x, width - padding - offset_x + 1, round((width - 2 * padding - 2 * offset_x) / 6)):
+#        canvas.line([(x, height - padding), (x, height - padding + dash_length)], black, 1)
+#        canvas.text(
+#            (x - 10, height - padding + dash_length),
+#            text=dateval.strftime("%d/%m"),
+#            font=default_font, fill=black,
+#            direction='ttb',
+#            anchor='mm'
+#        )
+#        dateval = dateval + datetime.timedelta(days=1)
 
-    val = max_graph_val
-    valstep = (max_graph_val - min_graph_val) / 4
-    val_reg = max_graph_reg_val
-    valstep_reg = (max_graph_reg_val - min_graph_reg_val) / 4
-    for y in range(padding + offset_y, height - padding - offset_y + 1,
-                   round((height - 2 * padding - 2 * offset_y) / 4)):
-        canvas.text((1, y), text=str(floor(val)), font=default_font, fill=line_color, direction='ttb', anchor='mm')
-        canvas.text((width - padding + 2, y), text=str(floor(val_reg)), font=default_font, fill=bar_color, direction='ttb',
-                    anchor='mm')
-        canvas.line([(padding, y), (padding - dash_length, y)], line_color, 1)
-        canvas.line([(width - padding, y), (width - padding + dash_length, y)], bar_color, 1)
-        val -= valstep
-        val_reg -= valstep_reg
+#    val = max_graph_val
+#    valstep = (max_graph_val -# min_graph_val) / 4
+#    val_reg = max_graph_reg_va#l
+#    valstep_reg = (max_graph_reg_val - min_graph_reg_val) / 4#
+#    for y in range(padding + offset_y, height - padding - offset_y + 1,
+#                   round((height - 2 * padding - 2 * offset_y) / 4)):
+#        canvas.text((1, y), text=str(floor(val)), font=default_font, fill=line_color, direction='ttb', anchor='mm')
+#        canvas.text((width - padding + 2, y), text=str(floor(val_reg)), font=default_font, fill=bar_color, direction='ttb',
+#                    anchor='mm')
+#        canvas.line([(padding, y), (padding - dash_length, y)], line_color, 1)
+#        canvas.line([(width - padding, y), (width - padding + dash_length, y)], bar_color, 1)
+#        val -= valstep
+#        val_reg -= valstep_reg
 
-    for i in range(0, 7):
-        cur_val = sums[13 - i]['num']
-        cur_graph_val = \
-            round(height - padding - offset_y - (cur_val - min_graph_reg_val) / graph_range_reg_y * value_zone_y)
-        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
-        canvas.rectangle(
-            [(cur_x - bar_width / 2, height - padding - 1), (cur_x + bar_width / 2, cur_graph_val)],
-            fill=bar_color,
-            outline=bar_outline_color
-        )
+#    for i in range(0, 7):
+#        cur_val = sums[13 - i]['num']
+#        cur_graph_val = \
+#            round(height - padding - offset_y - (cur_val - min_graph_reg_val) / graph_range_reg_y * value_zone_y)
+#        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
+#        canvas.rectangle(
+#            [(cur_x - bar_width / 2, height - padding - 1), (cur_x + bar_width / 2, cur_graph_val)],
+#            fill=bar_color,
+#            outline=bar_outline_color
+#        )
 
-    dots = []
-    for i in range(0, 7):
-        cur_val = sums[6 - i]['num']
-        cur_graph_val = round(height - padding - offset_y - (cur_val - min_graph_val) / graph_range_y * value_zone_y)
-        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
-        dots.append((cur_x, cur_graph_val))
+#    dots = []
+#    for i in range(0, 7):
+#        cur_val = sums[6 - i]['num']
+#        cur_graph_val = round(height - padding - offset_y - (cur_val - min_graph_val) / graph_range_y * value_zone_y)
+#        cur_x = round(padding + offset_x + value_zone_x / 6 * i)
+#        dots.append((cur_x, cur_graph_val))
 
-    canvas.line(dots, fill=line_color, width=1, joint='curve')
-    bio = BytesIO()
-    bio.name = 'image.png'
-    image.save(bio, 'PNG')
-    bio.seek(0)
-    bot.send_photo(chat_id=chat_id, photo=bio)
+#    canvas.line(dots, fill=line_color, width=1, joint='curve')
+#    bio = BytesIO()
+#    bio.name = 'image.png'
+#    image.save(bio, 'PNG')
+#    bio.seek(0)
+#    bot.send_photo(chat_id=chat_id, photo=bio)
 
 
 def shortbot(event, context):
